@@ -153,3 +153,66 @@ class TestChromaVectorStoreInterface:
         assert hasattr(store, "upsert")
         assert hasattr(store, "query")
         assert hasattr(store, "delete_by_project")
+
+
+class TestGraphService:
+    def test_build_graph_creates_nodes(self):
+        from app.application.services.graph_service import GraphService
+        service = GraphService()
+        entities = [
+            {
+                "name": "FastAPI",
+                "entity_type": "technology",
+                "confidence": 0.95,
+                "evidence": ["Using FastAPI for the backend."],
+            },
+        ]
+        graph = service.build_graph(entities)
+        assert len(graph.nodes) == 1
+        assert graph.nodes[0].label == "FastAPI"
+
+    def test_build_graph_creates_edges(self):
+        from app.application.services.graph_service import GraphService
+        service = GraphService()
+        entities = [
+            {
+                "name": "FastAPI",
+                "entity_type": "technology",
+                "confidence": 0.95,
+                "relationships": [
+                    {"related_to": "PostgreSQL", "relationship_type": "depends_on"},
+                ],
+            },
+        ]
+        graph = service.build_graph(entities)
+        assert len(graph.edges) == 1
+        assert graph.edges[0].relationship == "depends_on"
+
+    def test_graph_filtering_by_type(self):
+        from app.application.services.graph_service import GraphService
+        service = GraphService()
+        entities = [
+            {"name": "FastAPI", "entity_type": "technology"},
+            {"name": "Alice", "entity_type": "person"},
+        ]
+        graph = service.build_graph(entities)
+        filtered = service.filter_graph(graph, entity_types=["technology"])
+        assert len(filtered.nodes) == 1
+        assert filtered.nodes[0].type == "technology"
+
+    def test_graph_deduplication(self):
+        from app.application.services.graph_service import GraphService
+        service = GraphService()
+        entities = [
+            {"name": "FastAPI", "entity_type": "technology"},
+            {"name": "fastapi", "entity_type": "technology"},
+        ]
+        graph = service.build_graph(entities)
+        assert len(graph.nodes) <= 2
+
+    def test_empty_entities(self):
+        from app.application.services.graph_service import GraphService
+        service = GraphService()
+        graph = service.build_graph([])
+        assert len(graph.nodes) == 0
+        assert len(graph.edges) == 0

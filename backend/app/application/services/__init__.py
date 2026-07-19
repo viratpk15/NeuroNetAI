@@ -4,6 +4,7 @@ from app.application.services.embedding_service import EmbeddingService
 from app.application.services.context_builder import ContextBuilder, RetrievedChunk
 from app.application.services.retrieval_service import RetrievalService
 from app.application.services.chat_service import ChatService, ChatResponse
+from app.application.services.graph_service import GraphService, GraphNode, GraphEdge, GraphResponse
 
 __all__ = [
     "DocumentChunker",
@@ -14,4 +15,8 @@ __all__ = [
     "RetrievalService",
     "ChatService",
     "ChatResponse",
+    "GraphService",
+    "GraphNode",
+    "GraphEdge",
+    "GraphResponse",
 ]

@@ -1,15 +1,12 @@
 """Chat service for RAG-powered conversations."""
 import logging
 import time
-from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.application.services.retrieval_service import RetrievalService, RetrievedChunk
 from app.prompts.prompt_builder import PromptBuilder
 from app.infrastructure.ai_providers.factory import ProviderFactory
-from app.infrastructure.ai_providers.base import AIProvider
-from app.shared.config import get_settings
 
 logger = logging.getLogger(__name__)
 
