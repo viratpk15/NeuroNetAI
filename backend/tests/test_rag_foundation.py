@@ -123,7 +123,7 @@ class TestEmbeddingService:
 
 class TestContextBuilder:
     def test_removes_duplicates(self):
-        from app.application.services.retrieval_service import ContextBuilder, RetrievedChunk
+        from app.application.services.context_builder import ContextBuilder, RetrievedChunk
         builder = ContextBuilder()
         chunks = [
             RetrievedChunk("Same content", {"source": "a"}, 0.9),
@@ -133,7 +133,7 @@ class TestContextBuilder:
         assert result.count("Same content") == 1
 
     def test_sorts_by_score(self):
-        from app.application.services.retrieval_service import ContextBuilder, RetrievedChunk
+        from app.application.services.context_builder import ContextBuilder, RetrievedChunk
         builder = ContextBuilder()
         chunks = [
             RetrievedChunk("High score", {"source": "a"}, 0.5),

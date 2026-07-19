@@ -3,6 +3,7 @@ from app.application.services.chunking_service import DocumentChunker, ChunkMeta
 from app.application.services.embedding_service import EmbeddingService
 from app.application.services.context_builder import ContextBuilder, RetrievedChunk
 from app.application.services.retrieval_service import RetrievalService
+from app.application.services.chat_service import ChatService, ChatResponse
 
 __all__ = [
     "DocumentChunker",
@@ -11,4 +12,6 @@ __all__ = [
     "ContextBuilder",
     "RetrievedChunk",
     "RetrievalService",
+    "ChatService",
+    "ChatResponse",
 ]
