@@ -1,20 +1,41 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, Analysis } from "@/lib/api";
+import { ErrorState } from "@/components/ErrorState";
 
 export default function ReportsPage() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getAnalysis("demo-project")
       .then(setAnalysis)
-      .catch(() => {})
+      .catch(e => {
+        const err = e as Error & { status?: number; isNetworkError?: boolean };
+        if (err.isNetworkError) {
+          setError("Unable to connect to backend. Please ensure the backend is running.");
+        } else {
+          setError(err.message || "Failed to load analysis");
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <ReportsSkeleton />;
+  if (loading) {
+    return <ReportsSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 lg:p-8 max-w-6xl">
+        <h1 className="text-2xl font-display font-semibold text-ink mb-4">AI Reports</h1>
+        <ErrorState title="Failed to load reports" message={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl">
@@ -24,20 +45,35 @@ export default function ReportsPage() {
       </div>
 
       {!analysis ? (
-        <div className="bg-surface rounded-lg p-8 border border-border text-center">
-          <p className="text-inkMuted mb-4">Run AI analysis to generate reports</p>
-        </div>
+        <ReportsEmptyState />
       ) : (
         <div className="space-y-6">
           <ExecutiveSummary analysis={analysis} />
           <TaskReport analysis={analysis} />
           <TeamReport analysis={analysis} />
           <TechnologyReport analysis={analysis} />
-          <TimelineReport analysis={analysis} />
+          <TimelineReport />
           <RiskReport analysis={analysis} />
           <ExportPanel analysis={analysis} />
         </div>
       )}
+    </div>
+  );
+}
+
+function ReportsEmptyState() {
+  return (
+    <div className="bg-surface rounded-lg p-12 border border-border text-center">
+      <svg className="w-16 h-16 mx-auto mb-4 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <h3 className="text-lg font-medium text-ink mb-2">No reports generated yet</h3>
+      <p className="text-sm text-inkMuted mb-4">
+        Run AI analysis to generate your first report with insights about decisions, tasks, and technologies.
+      </p>
+      <Link href="/workspace/demo-project" className="inline-block bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition">
+        Generate Report
+      </Link>
     </div>
   );
 }
@@ -103,12 +139,16 @@ function TeamReport({ analysis }: { analysis: Analysis }) {
     <div className="bg-surface rounded-lg p-6 border border-border">
       <h2 className="text-lg font-medium text-ink mb-3">Team Report</h2>
       <div className="space-y-2">
-        {topContributors.map(([name, count]) => (
-          <div key={name} className="flex justify-between text-sm">
-            <span className="text-ink">@{name}</span>
-            <span className="text-inkMuted">{count} mentions</span>
-          </div>
-        ))}
+        {topContributors.length === 0 ? (
+          <p className="text-inkMuted text-sm">No contributors detected</p>
+        ) : (
+          topContributors.map(([name, count]) => (
+            <div key={name} className="flex justify-between text-sm">
+              <span className="text-ink">@{name}</span>
+              <span className="text-inkMuted">{count} mentions</span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -137,8 +177,7 @@ function TechnologyReport({ analysis }: { analysis: Analysis }) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function TimelineReport({ analysis }: { analysis: Analysis }) {
+function TimelineReport() {
   return (
     <div className="bg-surface rounded-lg p-6 border border-border">
       <h2 className="text-lg font-medium text-ink mb-3">Timeline Report</h2>
@@ -151,7 +190,6 @@ function TimelineReport({ analysis }: { analysis: Analysis }) {
 }
 
 function RiskReport({ analysis }: { analysis: Analysis }) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const risks: string[] = [];
   if (analysis.sentiment?.overall_sentiment === "negative") risks.push("Negative sentiment detected");
   const highPriority = analysis.tasks.filter(t => t.priority === "high").length;

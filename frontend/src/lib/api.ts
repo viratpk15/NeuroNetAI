@@ -52,18 +52,38 @@ export interface Analysis {
   entities: Entity[];
 }
 
+interface ApiError extends Error {
+  status?: number;
+  isNetworkError?: boolean;
+}
+
+function createApiError(message: string, status?: number, isNetworkError?: boolean): ApiError {
+  const error = new Error(message) as ApiError;
+  error.status = status;
+  error.isNetworkError = isNetworkError;
+  return error;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? `Request failed with status ${res.status}`);
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...init?.headers },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw createApiError(body.detail ?? `Request failed with status ${res.status}`, res.status);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  } catch (err) {
+    // Handle network errors (backend offline, CORS issues, etc.)
+    if (err instanceof Error && !err.message.includes("status")) {
+      throw createApiError(err.message, undefined, true);
+    }
+    throw err;
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
 }
 
 export const api = {

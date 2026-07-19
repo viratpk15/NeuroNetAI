@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import Link from "next/link";
 import { api, Analysis } from "@/lib/api";
+import { LoadingState } from "@/components/LoadingState";
 
 interface Message {
   id: string;
@@ -14,11 +16,16 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initLoading, setInitLoading] = useState(true);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.getAnalysis("demo-project").then(setAnalysis).catch(() => {});
+    setInitLoading(true);
+    api.getAnalysis("demo-project")
+      .then(setAnalysis)
+      .catch(() => {})
+      .finally(() => setInitLoading(false));
   }, []);
 
   useEffect(() => {
@@ -50,6 +57,42 @@ export default function ChatPage() {
     setLoading(false);
   }, [input, analysis]);
 
+  if (initLoading) {
+    return (
+      <div className="p-8">
+        <div className="h-8 w-32 bg-surfaceRaised rounded mb-2 animate-pulse" />
+        <div className="h-4 w-48 bg-surfaceRaised rounded mb-6 animate-pulse" />
+        <LoadingState count={2} />
+      </div>
+    );
+  }
+
+  // Show onboarding if no analyzed project exists
+  if (!analysis) {
+    return (
+      <div className="flex flex-col h-screen">
+        <header className="border-b border-border p-4">
+          <h1 className="text-xl font-display font-semibold text-ink">AI Chat</h1>
+          <p className="text-sm text-inkMuted mt-1">Ask questions about your project data</p>
+        </header>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <svg className="w-16 h-16 mx-auto mb-4 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4-.84c-1.21.436-2.429.82-3.654.943A1 1 0 013 19V7a1 1 0 011.447-.892c.96.378 2.025.72 3.116.996C8.03 6.29 9.19 6 10.5 6h9c4.418 0 8 3.582 8 8z" />
+            </svg>
+            <h3 className="text-lg font-medium text-ink mb-2">Import project data before chatting</h3>
+            <p className="text-sm text-inkMuted mb-4">
+              Import your team communications in the workspace to enable AI-powered chat insights.
+            </p>
+            <Link href="/workspace/demo-project" className="inline-block bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition">
+              Go to Workspace
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen">
       <header className="border-b border-border p-4">
@@ -59,7 +102,7 @@ export default function ChatPage() {
 
       <main className="flex-1 overflow-y-auto p-4 space-y-4" aria-label="Chat messages">
         {messages.length === 0 && !loading && (
-          <EmptyState />
+          <ChatEmptyState />
         )}
         {messages.map(msg => (
           <ChatMessage key={msg.id} message={msg} />
@@ -91,11 +134,13 @@ export default function ChatPage() {
   );
 }
 
-function EmptyState() {
+function ChatEmptyState() {
   return (
     <div className="text-center py-12">
-      <p className="text-inkMuted mb-2">No messages yet</p>
-      <p className="text-sm text-inkMuted/60">Try: &ldquo;What decisions were made?&rdquo; or &ldquo;Who discussed authentication?&rdquo;</p>
+      <h3 className="text-lg font-medium text-ink mb-2">Ask me anything about your project</h3>
+      <p className="text-sm text-inkMuted/60">
+        Try: &ldquo;What decisions were made?&rdquo; or &ldquo;Who discussed authentication?&rdquo;
+      </p>
     </div>
   );
 }
