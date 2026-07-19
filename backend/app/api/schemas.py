@@ -97,3 +97,83 @@ class CommunicationEventListResponse(BaseModel):
     items: list[CommunicationEventResponse]
     limit: int
     offset: int
+
+
+# Analysis Schemas
+
+class TaskResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    agent_run_id: UUID
+    title: str
+    description: str
+    assignee: str | None = None
+    priority: str
+    status: str
+    due_date: datetime | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaskListResponse(BaseModel):
+    items: list[TaskResponse]
+    limit: int
+    offset: int
+
+
+class SentimentResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    agent_run_id: UUID
+    overall_sentiment: str
+    positivity_score: float
+    stress_score: float
+    confidence_score: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EntityResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    agent_run_id: UUID
+    entity_type: str
+    name: str
+    context: str
+    confidence: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EntityListResponse(BaseModel):
+    items: list[EntityResponse]
+    limit: int
+    offset: int
+
+
+class ConversationSummaryResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    agent_run_id: UUID
+    summary: str
+    topics: list[str]
+    decisions: list[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AnalysisResponse(BaseModel):
+    agent_run_id: UUID
+    status: str
+    summary: str
+    topics: list[str]
+    decisions: list[str]
+    tasks: list[TaskResponse]
+    sentiment: SentimentResponse | None
+    entities: list[EntityResponse]
+
+    model_config = {"from_attributes": True}

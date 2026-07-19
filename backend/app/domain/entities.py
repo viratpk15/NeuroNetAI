@@ -102,3 +102,86 @@ class CommunicationEvent:
     def __post_init__(self) -> None:
         if self.metadata is None:
             self.metadata = {}
+
+
+# AI Intelligence Engine Entities
+
+class AgentStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class AgentRun:
+    project_id: UUID
+    status: AgentStatus = AgentStatus.PENDING
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_utc_now)
+    completed_at: datetime | None = None
+    error_message: str | None = None
+    metadata: dict | None = None
+
+    def mark_running(self) -> None:
+        self.status = AgentStatus.RUNNING
+        self.completed_at = None
+
+    def mark_completed(self, metadata: dict | None = None) -> None:
+        self.status = AgentStatus.COMPLETED
+        self.completed_at = _utc_now()
+        self.metadata = metadata
+
+    def mark_failed(self, error_message: str) -> None:
+        self.status = AgentStatus.FAILED
+        self.error_message = error_message
+        self.completed_at = _utc_now()
+
+
+@dataclass
+class ConversationSummary:
+    project_id: UUID
+    agent_run_id: UUID
+    summary: str
+    topics: list[str] = field(default_factory=list)
+    decisions: list[str] = field(default_factory=list)
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_utc_now)
+
+
+@dataclass
+class Task:
+    project_id: UUID
+    agent_run_id: UUID
+    title: str
+    description: str = ""
+    assignee: str | None = None
+    priority: str = "medium"  # low, medium, high
+    status: str = "open"  # open, in_progress, done, blocked
+    due_date: datetime | None = None
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_utc_now)
+
+
+@dataclass
+class SentimentResult:
+    project_id: UUID
+    agent_run_id: UUID
+    overall_sentiment: str  # positive, negative, neutral
+    positivity_score: float = 0.0  # 0.0 - 1.0
+    stress_score: float = 0.0  # 0.0 - 1.0
+    confidence_score: float = 0.0  # 0.0 - 1.0
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_utc_now)
+
+
+@dataclass
+class Entity:
+    project_id: UUID
+    agent_run_id: UUID
+    entity_type: str  # person, technology, repository, api, library, framework, deadline, organization
+    name: str
+    context: str = ""
+    confidence: float = 0.0  # 0.0 - 1.0
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_utc_now)

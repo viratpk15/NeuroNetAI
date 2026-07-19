@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, imports, projects
+from app.api.routes import health, imports, projects, analysis
 from app.infrastructure.database import Base, engine
 from app.shared.config import get_settings
 from app.shared.logging import configure_logging
@@ -39,3 +39,4 @@ app.add_middleware(
 app.include_router(health.router, prefix=settings.api_v1_prefix)
 app.include_router(projects.router, prefix=settings.api_v1_prefix)
 app.include_router(imports.router, prefix=settings.api_v1_prefix)
+app.include_router(analysis.router, prefix=settings.api_v1_prefix)
