@@ -13,7 +13,8 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "@tanstack/react-query": "5.62.11",
-    "zustand": "5.0.2"
+    "zustand": "5.0.2",
+    "reactflow": "11.11.4"
   },
   "devDependencies": {
     "typescript": "5.7.2",

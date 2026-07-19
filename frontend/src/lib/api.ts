@@ -31,6 +31,11 @@ export interface Sentiment {
   positivity_score: number;
   stress_score: number;
   confidence_score: number;
+  delivery_risk?: string;
+  team_morale?: string;
+  burnout_probability?: number;
+  blockers?: string[];
+  conflicts?: string[];
 }
 
 export interface Entity {
