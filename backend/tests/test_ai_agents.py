@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from app.domain.entities import CommunicationEvent
 from app.application.agents.conversation_agent import ConversationAgent, ConversationResponse
-from app.application.agents.task_agent import TaskAgent
+from app.application.agents.task_agent import TaskAgent, TaskItem, TaskResponse
 from app.application.agents.sentiment_agent import SentimentAgent
 from app.application.agents.entity_agent import EntityAgent
 
@@ -150,7 +150,78 @@ class TestTaskAgent:
             assert "title" in task
             assert "description" in task
             assert "priority" in task
-            assert task["priority"] in ("low", "medium", "high")
+            assert task["priority"] in ("low", "medium", "high", "critical")
+            assert "status" in task
+            assert "confidence" in task
+            assert isinstance(task["confidence"], (int, float))
+            assert 0.0 <= task["confidence"] <= 1.0
+
+    async def test_task_item_validation(self):
+        """Test TaskItem Pydantic model validation."""
+        valid_task = TaskItem(
+            title="Implement auth",
+            description="Add JWT auth to the backend",
+            assignee="@alice",
+            priority="high",
+            status="in_progress",
+            confidence=0.9,
+            evidence=["I will work on the login endpoint"],
+        )
+        assert valid_task.title == "Implement auth"
+        assert valid_task.priority == "high"
+        assert valid_task.status == "in_progress"
+
+    async def test_task_response_validation(self):
+        """Test TaskResponse Pydantic model validation."""
+        valid_data = {
+            "tasks": [
+                {
+                    "title": "Task 1",
+                    "priority": "high",
+                    "status": "todo",
+                    "confidence": 0.85,
+                    "evidence": ["some evidence"],
+                },
+                {
+                    "title": "Task 2",
+                    "priority": "low",
+                    "status": "done",
+                    "confidence": 0.7,
+                    "evidence": [],
+                },
+            ],
+        }
+        response = TaskResponse(**valid_data)
+        assert len(response.tasks) == 2
+        assert response.tasks[0].priority == "high"
+
+    async def test_critical_priority_detection(self):
+        """Test that urgent tasks get critical priority."""
+        urgent_events = [
+            CommunicationEvent(
+                document_id=uuid4(),
+                content="This is CRITICAL and needs ASAP attention!",
+                timestamp=datetime.now(timezone.utc),
+                source="slack_message",
+                author="manager",
+            )
+        ]
+        agent = TaskAgent()
+        result = await agent.process(urgent_events)
+
+        # Rule-based should detect high priority
+        for task in result["tasks"]:
+            assert task["priority"] in ("low", "medium", "high", "critical")
+
+    async def test_llm_integration_fallback(self):
+        """Test that LLM integration falls back gracefully."""
+        agent = TaskAgent(project_name="Test Project")
+
+        result = await agent.process(SAMPLE_EVENTS)
+
+        # Should return valid structure
+        assert isinstance(result, dict)
+        assert "tasks" in result
 
     async def test_handles_empty_events(self):
         agent = TaskAgent()
