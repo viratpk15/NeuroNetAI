@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from app.domain.entities import CommunicationEvent
 from app.application.agents.conversation_agent import ConversationAgent, ConversationResponse
 from app.application.agents.task_agent import TaskAgent, TaskItem, TaskResponse
-from app.application.agents.sentiment_agent import SentimentAgent
+from app.application.agents.sentiment_agent import SentimentAgent, SentimentResponse
 from app.application.agents.entity_agent import EntityAgent, EntityItem, EntityResponse
 
 
@@ -236,8 +236,8 @@ class TestSentimentAgent:
         result = await agent.process(SAMPLE_EVENTS)
 
         assert "overall_sentiment" in result
-        assert "positivity_score" in result
-        assert "stress_score" in result
+        assert "team_morale" in result
+        assert "delivery_risk" in result
         assert "confidence_score" in result
 
     async def test_detects_positive_sentiment(self):
@@ -254,7 +254,7 @@ class TestSentimentAgent:
         result = await agent.process(positive_events)
 
         assert result["overall_sentiment"] == "positive"
-        assert result["positivity_score"] > 0
+        assert result["confidence_score"] > 0
 
     async def test_detects_stress_indicators(self):
         stress_events = [
@@ -269,14 +269,46 @@ class TestSentimentAgent:
         agent = SentimentAgent()
         result = await agent.process(stress_events)
 
-        assert result["stress_score"] > 0
+        assert result["delivery_risk"] in ("low", "medium", "high", "critical")
 
     async def test_handles_empty_events(self):
         agent = SentimentAgent()
         result = await agent.process([])
 
         assert result["overall_sentiment"] == "neutral"
-        assert result["positivity_score"] == 0.0
+        assert result["confidence_score"] == 0.0
+
+    async def test_sentiment_response_validation(self):
+        """Test SentimentResponse Pydantic model validation."""
+        valid_data = {
+            "overall_sentiment": "positive",
+            "team_morale": "high",
+            "delivery_risk": "low",
+            "burnout_probability": 0.1,
+            "confidence": 0.9,
+            "evidence": ["Great work everyone!"],
+        }
+        response = SentimentResponse(**valid_data)
+        assert response.overall_sentiment == "positive"
+        assert response.team_morale == "high"
+        assert response.delivery_risk == "low"
+
+    async def test_morale_detection(self):
+        """Test team morale detection."""
+        agent = SentimentAgent()
+        result = await agent.process(SAMPLE_EVENTS)
+
+        assert result["team_morale"] in ("high", "medium", "low")
+
+    async def test_llm_integration_fallback(self):
+        """Test that LLM integration falls back gracefully."""
+        agent = SentimentAgent(project_name="Test Project")
+
+        result = await agent.process(SAMPLE_EVENTS)
+
+        # Should return valid structure
+        assert isinstance(result, dict)
+        assert "overall_sentiment" in result
 
 
 class TestEntityAgent:

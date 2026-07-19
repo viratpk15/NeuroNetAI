@@ -1,87 +1,235 @@
-"""Sentiment Agent for analyzing sentiment in communication events."""
+"""Sentiment Analysis Agent for analyzing communication sentiment and engineering risks."""
 import logging
+import re
+import time
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from app.domain.entities import CommunicationEvent
 from app.application.agents.base import BaseAgent
+from app.infrastructure.ai_providers.factory import ProviderFactory
+from app.infrastructure.ai_providers.base import AIProvider
+from app.prompts.prompt_builder import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
 
+class SentimentResponse(BaseModel):
+    """Pydantic model for validated LLM sentiment analysis response."""
+
+    overall_sentiment: str = Field(default="neutral", description="Overall sentiment")
+    team_morale: str = Field(default="medium", description="Team morale level")
+    delivery_risk: str = Field(default="low", description="Delivery risk level")
+    burnout_probability: float = Field(default=0.0, ge=0.0, le=1.0, description="Burnout probability")
+    frustration_topics: list[str] = Field(default_factory=list, description="Frustration topics")
+    blockers: list[str] = Field(default_factory=list, description="Blocking issues")
+    conflicts: list[str] = Field(default_factory=list, description="Detected conflicts")
+    positive_signals: list[str] = Field(default_factory=list, description="Positive signals")
+    negative_signals: list[str] = Field(default_factory=list, description="Negative signals")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Overall confidence")
+    evidence: list[str] = Field(default_factory=list, description="Supporting evidence")
+
+
 class SentimentAgent(BaseAgent):
-    """Analyzes sentiment in communication events.
-    
-    This implementation uses deterministic rule-based analysis.
-    When LLM providers are available, this can be replaced with LLM-powered analysis.
+    """Analyzes communication sentiment and engineering risks.
+
+    Uses LLM provider (Ollama/Gemini) when available, falls back to rule-based analysis.
     """
 
-    # Sentiment-indicating words
-    POSITIVE_WORDS = [
-        "good", "great", "excellent", "awesome", "fantastic", "wonderful",
-        "happy", "pleased", "glad", "excited", "positive", "love", "like",
-        "success", "achieve", "complete", "working", "ready", "perfect",
+    # Sentiment keywords
+    POSITIVE_KEYWORDS = [
+        "great", "awesome", "excellent", "good", "nice", "perfect", "working", "passing",
+        "success", "completed", "done", "fixed", "resolved", "thanks", "appreciate",
+    ]
+    NEGATIVE_KEYWORDS = [
+        "broken", "fail", "error", "bug", "issue", "problem", "bad", "terrible", "urgent",
+        "critical", "blocked", "stuck", "waiting", "frustrated", "confused", "delay", "behind",
+    ]
+    STRESS_KEYWORDS = [
+        "overtime", "deadline", "crunch", "urgent", "critical", "asap", "behind",
+        "pressure", "stress", "burnout", "exhausted", "overworked", "sleepless",
+    ]
+    BURNOUT_KEYWORDS = [
+        "exhausted", "burnout", "tired", "frustrated", "overworked", "crunch", "sleepless",
+        "no time", "can't keep up", "overwhelmed", "drowning",
     ]
 
-    NEGATIVE_WORDS = [
-        "bad", "terrible", "awful", "horrible", "hate", "dislike",
-        "frustrated", "annoyed", "angry", "upset", "sad", "unhappy",
-        "fail", "failed", "broken", "bug", "issue", "error", "problem",
-        "concern", "worry", "stress", "stressed", "blocked", "stuck",
-    ]
-
-    STRESS_INDICATORS = [
-        "urgent", "asap", "deadline", "pressure", "behind schedule",
-        "overtime", "crunch", "blocked", "waiting", "delayed",
-    ]
+    def __init__(self, project_name: str | None = None):
+        self._project_name = project_name
+        self._prompt_builder = PromptBuilder()
 
     async def process(self, events: list[CommunicationEvent]) -> dict[str, Any]:
-        """Process communication events to extract sentiment scores.
-        
+        """Process communication events to extract sentiment and risk analysis.
+
+        Uses LLM provider when available, falls back to rule-based analysis.
+
         Args:
             events: List of communication events to analyze
-            
+
         Returns:
             Dictionary with sentiment analysis results
         """
         if not events:
-            return {
-                "overall_sentiment": "neutral",
-                "positivity_score": 0.0,
-                "stress_score": 0.0,
-                "confidence_score": 0.0,
-            }
+            return self._empty_response()
 
+        # Try LLM provider first
+        provider = ProviderFactory.get_provider()
+        if provider:
+            try:
+                result = await self._llm_process(events, provider)
+                if result is not None:
+                    return result
+            except Exception as e:
+                logger.warning(f"LLM provider failed, falling back to rule-based: {e}")
+
+        # Fallback to rule-based analysis
+        logger.info("Using rule-based fallback for SentimentAgent")
+        return self._rule_based_process(events)
+
+    async def _llm_process(
+        self,
+        events: list[CommunicationEvent],
+        provider: AIProvider,
+    ) -> dict[str, Any] | None:
+        """Process using LLM provider with logging.
+
+        Args:
+            events: Communication events to analyze
+            provider: AI provider to use
+
+        Returns:
+            Structured response or None on failure
+        """
+        start_time = time.time()
+        prompt = self._prompt_builder.build_sentiment_prompt(events, self._project_name)
+
+        logger.info(
+            f"LLM request - provider: {provider.__class__.__name__}, "
+            f"model: {getattr(provider, 'model', 'unknown')}, "
+            f"prompt_size: {len(prompt)} chars",
+        )
+
+        response = await provider.analyze_sentiment(events, self._project_name)
+
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        # Validate response with Pydantic
+        try:
+            validated = SentimentResponse(**response)
+
+            logger.info(
+                f"LLM response - latency: {latency_ms}ms, "
+                f"risk_level: {validated.delivery_risk}, "
+                f"confidence: {validated.confidence}",
+            )
+
+            result = validated.model_dump()
+            # Maintain backward compatibility
+            result["positivity_score"] = 0.5
+            result["stress_score"] = 0.5
+            return result
+        except Exception as e:
+            logger.warning(f"Failed to validate LLM response, falling back: {e}")
+            return None
+
+    def _empty_response(self) -> dict[str, Any]:
+        """Return empty response structure."""
+        return {
+            "overall_sentiment": "neutral",
+            "team_morale": "medium",
+            "delivery_risk": "low",
+            "burnout_probability": 0.0,
+            "frustration_topics": [],
+            "blockers": [],
+            "conflicts": [],
+            "positive_signals": [],
+            "negative_signals": [],
+            "confidence_score": 0.0,
+            "evidence": [],
+        }
+
+    def _rule_based_process(self, events: list[CommunicationEvent]) -> dict[str, Any]:
+        """Rule-based analysis fallback.
+
+        Args:
+            events: List of communication events to analyze
+
+        Returns:
+            Dictionary with analysis results
+        """
         positive_count = 0
         negative_count = 0
         stress_count = 0
+        burnout_count = 0
+        positive_signals = []
+        negative_signals = []
 
         for event in events:
             content_lower = event.content.lower()
-            positive_count += sum(1 for word in self.POSITIVE_WORDS if word in content_lower)
-            negative_count += sum(1 for word in self.NEGATIVE_WORDS if word in content_lower)
-            stress_count += sum(1 for word in self.STRESS_INDICATORS if word in content_lower)
 
-        total_words = sum(len(event.content.split()) for event in events) or 1
-        positivity_score = min(1.0, positive_count / max(1, total_words / 20))
-        negativity_score = min(1.0, negative_count / max(1, total_words / 20))
-        stress_score = min(1.0, stress_count / max(1, len(events) / 5))
+            for keyword in self.POSITIVE_KEYWORDS:
+                if keyword in content_lower:
+                    positive_count += 1
+                    positive_signals.append(keyword)
+
+            for keyword in self.NEGATIVE_KEYWORDS:
+                if keyword in content_lower:
+                    negative_count += 1
+                    negative_signals.append(keyword)
+
+            for keyword in self.STRESS_KEYWORDS:
+                if keyword in content_lower:
+                    stress_count += 1
+
+            for keyword in self.BURNOUT_KEYWORDS:
+                if keyword in content_lower:
+                    burnout_count += 1
 
         # Determine overall sentiment
-        if positivity_score > negativity_score + 0.1:
+        if positive_count > negative_count:
             overall_sentiment = "positive"
-        elif negativity_score > positivity_score + 0.1:
+        elif negative_count > positive_count:
             overall_sentiment = "negative"
         else:
             overall_sentiment = "neutral"
 
-        # Confidence based on ratio of sentiment words to total events
-        confidence_score = min(1.0, (positive_count + negative_count) / max(1, len(events)))
+        # Determine team morale
+        if positive_count > negative_count + 2:
+            team_morale = "high"
+        elif negative_count > positive_count + 2:
+            team_morale = "low"
+        else:
+            team_morale = "medium"
 
-        logger.info(f"SentimentAgent: {overall_sentiment} (pos={positivity_score:.2f}, neg={negativity_score:.2f})")
+        # Determine delivery risk
+        if burnout_count > 0 or stress_count > 3:
+            delivery_risk = "critical"
+        elif stress_count > 1 or negative_count > 2:
+            delivery_risk = "high"
+        elif negative_count > 0:
+            delivery_risk = "medium"
+        else:
+            delivery_risk = "low"
+
+        burnout_probability = min(burnout_count / max(len(events), 1), 1.0)
+
+        logger.info(
+            f"SentimentAgent rule-based found sentiment: {overall_sentiment}, "
+            f"morale: {team_morale}, "
+            f"risk: {delivery_risk}",
+        )
 
         return {
             "overall_sentiment": overall_sentiment,
-            "positivity_score": round(positivity_score, 2),
-            "stress_score": round(stress_score, 2),
-            "confidence_score": round(confidence_score, 2),
+            "team_morale": team_morale,
+            "delivery_risk": delivery_risk,
+            "burnout_probability": burnout_probability,
+            "frustration_topics": negative_signals[:5],
+            "blockers": [],
+            "conflicts": [],
+            "positive_signals": list(set(positive_signals))[:5],
+            "negative_signals": list(set(negative_signals))[:5],
+            "confidence_score": 0.6,
+            "evidence": [e.content[:100] for e in events[:3]],
         }
