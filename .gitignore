@@ -1,0 +1,50 @@
+# =========================
+# Python
+# =========================
+backend/.venv/
+backend/__pycache__/
+backend/**/*.pyc
+backend/.pytest_cache/
+backend/.mypy_cache/
+
+# =========================
+# Environment
+# =========================
+backend/.env
+frontend/.env
+.env
+
+# =========================
+# ChromaDB
+# =========================
+backend/chroma_data/
+chroma_data/
+
+# =========================
+# Node
+# =========================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# macOS
+# =========================
+.DS_Store
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Coverage
+# =========================
+coverage/
+htmlcov/
