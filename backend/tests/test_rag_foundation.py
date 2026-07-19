@@ -216,3 +216,64 @@ class TestGraphService:
         graph = service.build_graph([])
         assert len(graph.nodes) == 0
         assert len(graph.edges) == 0
+
+
+class TestExecutiveReportService:
+    def test_health_score_calculation(self):
+        from app.application.services.executive_report_service import ExecutiveReportService
+        service = ExecutiveReportService()
+        task_data = {"tasks": [{"status": "done"}, {"status": "done"}]}
+        sentiment_data = {"delivery_risk": "low"}
+        score = service._calculate_health_score(task_data, sentiment_data)
+        assert 0 <= score <= 100
+
+    def test_report_generation(self):
+        from app.application.services.executive_report_service import ExecutiveReportService
+        service = ExecutiveReportService()
+        report = service.generate_report(
+            project_id="proj1",
+            project_name="Test Project",
+            conversation_data={"discussion_topics": ["auth"], "important_decisions": ["use JWT"]},
+            task_data={"tasks": [{"status": "done"}]},
+            entity_data={"entities": [{"entity_type": "person"}]},
+            sentiment_data={"delivery_risk": "low", "team_morale": "high"},
+        )
+        assert report.project_id == "proj1"
+        assert report.project_name == "Test Project"
+        assert len(report.sections) == 12
+
+    def test_report_markdown_export(self):
+        from app.application.services.executive_report_service import ExecutiveReportService, ExecutiveReport, ReportSection
+        service = ExecutiveReportService()
+        report = ExecutiveReport(
+            project_id="proj1",
+            project_name="Test",
+            generated_at="2024-01-01",
+            health_score=85,
+            sections=[ReportSection(title="Summary", content="Test content")],
+        )
+        md = service.to_markdown(report)
+        assert "# Executive Report" in md
+        assert "Test content" in md
+
+    def test_recommendations_generation(self):
+        from app.application.services.executive_report_service import ExecutiveReportService
+        service = ExecutiveReportService()
+        sentiment = {"delivery_risk": "critical", "burnout_probability": 0.6}
+        tasks = {"tasks": [{"status": "todo"}] * 15}
+        recs = service._build_recommendations(sentiment, tasks)
+        assert len(recs.items) > 0
+
+    def test_empty_data_handling(self):
+        from app.application.services.executive_report_service import ExecutiveReportService
+        service = ExecutiveReportService()
+        report = service.generate_report(
+            project_id="proj1",
+            project_name="Empty",
+            conversation_data={},
+            task_data={"tasks": []},
+            entity_data={"entities": []},
+            sentiment_data={},
+        )
+        assert report.health_score >= 0
+        assert len(report.sections) == 12

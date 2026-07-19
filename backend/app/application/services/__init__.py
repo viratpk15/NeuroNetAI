@@ -5,6 +5,11 @@ from app.application.services.context_builder import ContextBuilder, RetrievedCh
 from app.application.services.retrieval_service import RetrievalService
 from app.application.services.chat_service import ChatService, ChatResponse
 from app.application.services.graph_service import GraphService, GraphNode, GraphEdge, GraphResponse
+from app.application.services.executive_report_service import (
+    ExecutiveReportService,
+    ExecutiveReport,
+    ReportSection,
+)
 
 __all__ = [
     "DocumentChunker",
@@ -19,4 +24,7 @@ __all__ = [
     "GraphNode",
     "GraphEdge",
     "GraphResponse",
+    "ExecutiveReportService",
+    "ExecutiveReport",
+    "ReportSection",
 ]
