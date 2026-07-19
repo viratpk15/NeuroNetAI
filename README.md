@@ -4,7 +4,7 @@ Multi-agent collaboration intelligence platform. Ingests exported team
 communication data (Slack/GitHub/Jira/etc.) and turns it into searchable
 knowledge and insights.
 
-## Status: Phase 1 of 4 — foundation
+## Status: Phase 2 of 4 — data import (in progress)
 
 This repo is being built in phases so every commit is real, runnable code
 with no placeholders or stubs pretending to be finished features. **What's
@@ -13,15 +13,19 @@ here right now:**
 - FastAPI backend, clean-architecture layout (`domain` → `application` →
   `infrastructure` → `api`), fully working **Projects** CRUD, async
   SQLAlchemy against Supabase Postgres, unit tests for the service layer.
+- **Data Import (Phase 2)**: Parsers for Markdown, TXT, GitHub Issues, and
+  GitHub PRs with full `ImportJob` tracking, `Document` storage, and
+  `CommunicationEvent` extraction.
 - Next.js 15 + Tailwind frontend shell with a Dashboard and a Projects page
   that are wired to the real API (create/list/archive/delete all work).
 - Docker Compose for local dev, `.env.example` files, no secrets committed.
 
-**Not built yet** (this is the honest roadmap, not a feature list to fake):
+**In Progress:**
 
-- Phase 2: Data import (starting with GitHub Issues/PRs) + first two
-  LangGraph agents (Task Extraction, Sentiment) writing real results to the
-  database.
+- Data import endpoints (implemented), awaiting AI agent integration.
+
+**Not built yet:**
+
 - Phase 3: AI Chat (project-aware, using imported data + agent output) and
   Dashboard metrics backed by real analysis instead of "phase 2" placeholders.
 - Phase 4: Knowledge graph, analytics, risk detection, reports, remaining
@@ -98,6 +102,41 @@ pytest
 `test_project_service.py` exercises create/rename/archive/delete/validation
 against an in-memory repository — it's a real check of the business logic,
 not a smoke test.
+
+## Import API Endpoints
+
+```
+POST   /api/v1/imports/markdown      # Import markdown chat logs
+POST   /api/v1/imports/txt           # Import plain text chat logs
+POST   /api/v1/imports/github-issue  # Import GitHub issue JSON
+POST   /api/v1/imports/github-pr     # Import GitHub PR JSON
+GET    /api/v1/imports/{job_id}      # Get import job status
+GET    /api/v1/imports               # List import jobs (optional: ?project_id=UUID)
+GET    /api/v1/imports/documents/{document_id}/events  # Get events for a document
+```
+
+### Example: Import Markdown
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/markdown \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "00000000-0000-0000-0000-000000000000",
+    "content": "## 2024-01-15 09:30 - @alice\n\nHello team!\n\n## 2024-01-15 09:35 - @bob\n\nWorking on the feature.",
+    "original_filename": "slack_export.md"
+  }'
+```
+
+### Example: Import GitHub Issue
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/github-issue \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "00000000-0000-0000-0000-000000000000",
+    "content": "{\"id\": 123, \"number\": 45, \"title\": \"Bug\", \"body\": \"Description\", \"user\": {\"login\": \"alice\"}, \"created_at\": \"2024-01-15T09:30:00Z\", \"comments\": []}"
+  }'
+```
 
 ## Next step
 
