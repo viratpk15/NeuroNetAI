@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 export type ProjectStatus = "active" | "archived";
 
@@ -15,6 +15,41 @@ interface ProjectListResponse {
   items: Project[];
   limit: number;
   offset: number;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  assignee: string | null;
+  priority: string;
+  status: string;
+}
+
+export interface Sentiment {
+  overall_sentiment: string;
+  positivity_score: number;
+  stress_score: number;
+  confidence_score: number;
+}
+
+export interface Entity {
+  id: string;
+  entity_type: string;
+  name: string;
+  context: string;
+  confidence: number;
+}
+
+export interface Analysis {
+  agent_run_id: string;
+  status: string;
+  summary: string;
+  topics: string[];
+  decisions: string[];
+  tasks: Task[];
+  sentiment: Sentiment | null;
+  entities: Entity[];
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -37,4 +72,12 @@ export const api = {
     request<Project>("/projects", { method: "POST", body: JSON.stringify({ name, description }) }),
   archiveProject: (id: string) => request<Project>(`/projects/${id}/archive`, { method: "POST" }),
   deleteProject: (id: string) => request<void>(`/projects/${id}`, { method: "DELETE" }),
+  getAnalysis: (projectId: string) => request<Analysis>(`/analysis/${projectId}`),
+  runAnalysis: (projectId: string) => request<Analysis>(`/analysis/${projectId}`, { method: "POST" }),
+  getTasks: (projectId: string, limit = 100, offset = 0) =>
+    request<{ items: Task[]; limit: number; offset: number }>(`/analysis/${projectId}/tasks?limit=${limit}&offset=${offset}`),
+  getSentiment: (projectId: string) =>
+    request<Sentiment>(`/analysis/${projectId}/sentiment`),
+  getEntities: (projectId: string, limit = 100, offset = 0) =>
+    request<{ items: Entity[]; limit: number; offset: number }>(`/analysis/${projectId}/entities?limit=${limit}&offset=${offset}`),
 };
