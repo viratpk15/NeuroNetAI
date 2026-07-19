@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:latest"
 
+    # RAG settings
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    top_k: int = 5
+    vector_provider: str = "chroma"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
