@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const SECTIONS = [
-  { href: "/", label: "Dashboard", icon: "🏠" },
+  { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/projects", label: "Projects", icon: "📁" },
   { href: "/workspace/demo-project", label: "Workspace", icon: "🤖" },
   { href: "/chat", label: "Chat", icon: "💬", disabled: true },
   { href: "/graph", label: "Knowledge Graph", icon: "🌐", disabled: true },
-  { href: "/analytics", label: "Analytics", icon: "📊", disabled: true },
+  { href: "/analytics", label: "Analytics", icon: "📈", disabled: true },
   { href: "/reports", label: "Reports", icon: "📄", disabled: true },
 ];
 
