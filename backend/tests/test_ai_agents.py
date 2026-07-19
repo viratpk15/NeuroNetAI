@@ -7,7 +7,7 @@ from app.domain.entities import CommunicationEvent
 from app.application.agents.conversation_agent import ConversationAgent, ConversationResponse
 from app.application.agents.task_agent import TaskAgent, TaskItem, TaskResponse
 from app.application.agents.sentiment_agent import SentimentAgent
-from app.application.agents.entity_agent import EntityAgent
+from app.application.agents.entity_agent import EntityAgent, EntityItem, EntityResponse
 
 
 # Sample test events
@@ -326,3 +326,82 @@ class TestEntityAgent:
         result = await agent.process([])
 
         assert result["entities"] == []
+
+    async def test_entity_item_validation(self):
+        """Test EntityItem Pydantic model validation."""
+        valid_entity = EntityItem(
+            entity_type="technology",
+            name="FastAPI",
+            context="Using FastAPI for the backend",
+            confidence=0.95,
+            relationships=[
+                {
+                    "related_to": "PostgreSQL",
+                    "relationship_type": "depends_on",
+                },
+            ],
+            evidence=["Using Python with FastAPI and PostgreSQL for the backend."],
+        )
+        assert valid_entity.entity_type == "technology"
+        assert valid_entity.name == "FastAPI"
+        assert valid_entity.confidence == 0.95
+        assert len(valid_entity.relationships) == 1
+
+    async def test_entity_response_validation(self):
+        """Test EntityResponse Pydantic model validation."""
+        valid_data = {
+            "entities": [
+                {
+                    "entity_type": "person",
+                    "name": "@alice",
+                    "confidence": 0.85,
+                    "evidence": ["Thanks @alice for the help"],
+                },
+                {
+                    "entity_type": "technology",
+                    "name": "Python",
+                    "confidence": 0.9,
+                    "evidence": ["Using Python with FastAPI"],
+                },
+            ],
+        }
+        response = EntityResponse(**valid_data)
+        assert len(response.entities) == 2
+        assert response.entities[0].entity_type == "person"
+
+    async def test_entity_confidence_range(self):
+        """Test that entity confidence is within valid range."""
+        agent = EntityAgent()
+        result = await agent.process(SAMPLE_EVENTS)
+
+        for entity in result["entities"]:
+            assert isinstance(entity["confidence"], (int, float))
+            assert 0.0 <= entity["confidence"] <= 1.0
+
+    async def test_llm_integration_fallback(self):
+        """Test that LLM integration falls back gracefully."""
+        agent = EntityAgent(project_name="Test Project")
+
+        result = await agent.process(SAMPLE_EVENTS)
+
+        # Should return valid structure
+        assert isinstance(result, dict)
+        assert "entities" in result
+
+    async def test_relationships_field_present(self):
+        """Test that relationships field is present in entities."""
+        agent = EntityAgent()
+        result = await agent.process(SAMPLE_EVENTS)
+
+        for entity in result["entities"]:
+            assert "relationships" in entity
+            assert isinstance(entity["relationships"], list)
+
+    async def test_evidence_field_present(self):
+        """Test that evidence field is present in entities."""
+        agent = EntityAgent()
+        result = await agent.process(SAMPLE_EVENTS)
+
+        for entity in result["entities"]:
+            assert "evidence" in entity
+            assert isinstance(entity["evidence"], list)
