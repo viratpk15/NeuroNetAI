@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api, Analysis } from "@/lib/api";
 
 interface Message {
@@ -15,11 +15,15 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load analysis for demo project
     api.getAnalysis("demo-project").then(setAnalysis).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -34,7 +38,6 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
 
-    // Generate AI response based on analysis
     const response = generateAIResponse(input, analysis);
     
     const assistantMessage: Message = {
@@ -49,39 +52,59 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-screen">
-      <div className="border-b border-border p-4">
+      <header className="border-b border-border p-4">
         <h1 className="text-xl font-display font-semibold text-ink">AI Chat</h1>
-        <p className="text-sm text-inkMuted">Ask questions about your project data</p>
-      </div>
+        <p className="text-sm text-inkMuted mt-1">Ask questions about your project data</p>
+      </header>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 space-y-4" aria-label="Chat messages">
+        {messages.length === 0 && !loading && (
+          <EmptyState />
+        )}
         {messages.map(msg => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
-        {loading && (
-          <div className="bg-surface rounded-lg p-3 max-w-xs">
-            <div className="animate-pulse">Thinking...</div>
-          </div>
-        )}
-      </div>
+        {loading && <ThinkingIndicator />}
+        <div ref={messagesEndRef} />
+      </main>
 
-      <div className="border-t border-border p-4">
-        <div className="flex gap-2">
+      <footer className="border-t border-border p-4">
+        <div className="flex gap-2 max-w-3xl mx-auto">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && sendMessage()}
+            onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
             placeholder="Ask about decisions, tasks, technologies..."
-            className="flex-1 bg-surfaceRaised border border-border rounded px-3 py-2 text-sm"
+            className="flex-1 bg-surfaceRaised border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-signal/50"
+            aria-label="Chat input"
           />
           <button
             onClick={sendMessage}
             disabled={loading || !input.trim()}
-            className="bg-signal text-canvas px-4 py-2 rounded font-medium disabled:opacity-50"
+            className="bg-signal text-canvas px-4 py-2 rounded font-medium transition disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-signal"
           >
             Send
           </button>
         </div>
+      </footer>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="text-center py-12">
+      <p className="text-inkMuted mb-2">No messages yet</p>
+      <p className="text-sm text-inkMuted/60">Try: "What decisions were made?" or "Who discussed authentication?"</p>
+    </div>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div className="bg-surface border border-border rounded-lg px-3 py-2">
+        <span className="text-sm text-inkMuted animate-pulse">Thinking...</span>
       </div>
     </div>
   );
@@ -89,14 +112,16 @@ export default function ChatPage() {
 
 function ChatMessage({ message }: { message: Message }) {
   return (
-    <div className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-xs rounded-lg p-3 ${
-        message.role === "user" ? "bg-signal text-canvas" : "bg-surface border border-border"
+    <div className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} animate-in`}>
+      <div className={`max-w-xs sm:max-w-md rounded-lg p-3 transition ${
+        message.role === "user" 
+          ? "bg-signal text-canvas" 
+          : "bg-surface border border-border"
       }`}>
-        <p className="text-sm">{message.content}</p>
-        <p className="text-[10px] mt-1 opacity-60">
+        <p className="text-sm leading-relaxed">{message.content}</p>
+        <time className="text-[10px] mt-1 block opacity-60" dateTime={message.timestamp.toISOString()}>
           {message.timestamp.toLocaleTimeString()}
-        </p>
+        </time>
       </div>
     </div>
   );
