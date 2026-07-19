@@ -6,6 +6,8 @@ from app.application.agents.conversation_agent import ConversationAgent
 from app.application.agents.task_agent import TaskAgent
 from app.application.agents.sentiment_agent import SentimentAgent
 from app.application.agents.entity_agent import EntityAgent
+from app.infrastructure.ai_providers.factory import ProviderFactory
+from app.infrastructure.ai_providers.base import AIProvider
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,8 @@ class AgentService:
     """Service that provides access to all AI agents.
     
     This is the central service that agents use to process communication events.
+    Agents continue using their existing rule-based implementation.
+    LLM providers can be obtained via ProviderFactory for future integration.
     """
 
     def __init__(
@@ -22,11 +26,14 @@ class AgentService:
         task_agent: TaskAgent | None = None,
         sentiment_agent: SentimentAgent | None = None,
         entity_agent: EntityAgent | None = None,
+        ai_provider: AIProvider | None = None,
     ):
         self.conversation_agent = conversation_agent or ConversationAgent()
         self.task_agent = task_agent or TaskAgent()
         self.sentiment_agent = sentiment_agent or SentimentAgent()
         self.entity_agent = entity_agent or EntityAgent()
+        # Obtain provider from factory if not provided
+        self.ai_provider = ai_provider or ProviderFactory.get_provider()
 
     async def run_all_agents(
         self, communication_events: list[Any]
@@ -41,7 +48,7 @@ class AgentService:
         """
         results: dict[str, Any] = {}
 
-        # Run each agent
+        # Run each agent (using existing rule-based implementation)
         results.update(await self.conversation_agent.process(communication_events))
         results.update(await self.task_agent.process(communication_events))
         results.update(await self.sentiment_agent.process(communication_events))

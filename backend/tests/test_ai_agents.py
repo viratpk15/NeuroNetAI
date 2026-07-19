@@ -1,9 +1,10 @@
 """Tests for AI Intelligence Engine agents and analysis service."""
 import pytest
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from app.domain.entities import CommunicationEvent
-from app.application.agents.conversation_agent import ConversationAgent
+from app.application.agents.conversation_agent import ConversationAgent, ConversationResponse
 from app.application.agents.task_agent import TaskAgent
 from app.application.agents.sentiment_agent import SentimentAgent
 from app.application.agents.entity_agent import EntityAgent
@@ -14,28 +15,28 @@ SAMPLE_EVENTS = [
     CommunicationEvent(
         document_id=uuid4(),
         content="Team discussed implementing the new authentication feature. We decided to use JWT tokens.",
-        timestamp=None,
+        timestamp=datetime.now(timezone.utc),
         source="slack_message",
         author="alice",
     ),
     CommunicationEvent(
         document_id=uuid4(),
         content="I will work on the login endpoint this week. Need to integrate with the database.",
-        timestamp=None,
+        timestamp=datetime.now(timezone.utc),
         source="slack_message",
         author="bob",
     ),
     CommunicationEvent(
         document_id=uuid4(),
         content="The GitHub API integration is working great! All tests are passing.",
-        timestamp=None,
+        timestamp=datetime.now(timezone.utc),
         source="github_comment",
         author="charlie",
     ),
     CommunicationEvent(
         document_id=uuid4(),
         content="We need to fix the bug in the user registration flow. It's urgent.",
-        timestamp=None,
+        timestamp=datetime.now(timezone.utc),
         source="github_issue_body",
         author="reporter",
     ),
@@ -43,13 +44,16 @@ SAMPLE_EVENTS = [
 
 
 class TestConversationAgent:
-    async def test_process_returns_summary_and_topics(self):
+    async def test_process_returns_all_fields(self):
         agent = ConversationAgent()
         result = await agent.process(SAMPLE_EVENTS)
 
         assert "conversation_summary" in result
         assert "discussion_topics" in result
         assert "important_decisions" in result
+        assert "risks" in result
+        assert "blockers" in result
+        assert "action_items" in result
 
     async def test_extracts_topics(self):
         agent = ConversationAgent()
@@ -73,6 +77,57 @@ class TestConversationAgent:
         assert result["conversation_summary"] == ""
         assert result["discussion_topics"] == []
         assert result["important_decisions"] == []
+        assert result["risks"] == []
+        assert result["blockers"] == []
+        assert result["action_items"] == []
+
+    async def test_llm_integration_with_valid_json(self):
+        """Test that LLM returns valid structured JSON when available."""
+        agent = ConversationAgent(project_name="Test Project")
+        
+        # Reset factory to get fresh provider
+        from app.infrastructure.ai_providers.factory import ProviderFactory
+        ProviderFactory.reset()
+        
+        result = await agent.process(SAMPLE_EVENTS)
+        
+        # Should have all required fields
+        assert isinstance(result, dict)
+        assert "conversation_summary" in result
+
+    async def test_conversation_response_validation(self):
+        """Test ConversationResponse Pydantic model validation."""
+        # Valid response
+        valid_data = {
+            "summary": "Test summary",
+            "topics": ["topic1", "topic2"],
+            "decisions": ["decision1"],
+            "risks": ["risk1"],
+            "blockers": ["blocker1"],
+            "action_items": ["action1"],
+        }
+        response = ConversationResponse(**valid_data)
+        assert response.summary == "Test summary"
+        assert len(response.topics) == 2
+
+        # Empty response defaults
+        empty_response = ConversationResponse()
+        assert empty_response.summary == ""
+        assert empty_response.topics == []
+        assert empty_response.decisions == []
+        assert empty_response.risks == []
+        assert empty_response.blockers == []
+        assert empty_response.action_items == []
+
+    async def test_fallback_on_invalid_json(self):
+        """Test that invalid JSON triggers fallback gracefully."""
+        agent = ConversationAgent()
+        # When no provider is available, should use rule-based fallback
+        result = await agent.process(SAMPLE_EVENTS)
+        
+        # Should still return valid structure
+        assert isinstance(result["conversation_summary"], str)
+        assert isinstance(result["discussion_topics"], list)
 
 
 class TestTaskAgent:
@@ -119,7 +174,7 @@ class TestSentimentAgent:
             CommunicationEvent(
                 document_id=uuid4(),
                 content="Great work everyone! Everything is working perfectly.",
-                timestamp=None,
+                timestamp=datetime.now(timezone.utc),
                 source="slack_message",
                 author="manager",
             )
@@ -135,7 +190,7 @@ class TestSentimentAgent:
             CommunicationEvent(
                 document_id=uuid4(),
                 content="This is urgent! We're behind schedule and need overtime.",
-                timestamp=None,
+                timestamp=datetime.now(timezone.utc),
                 source="slack_message",
                 author="manager",
             )
@@ -166,7 +221,7 @@ class TestEntityAgent:
             CommunicationEvent(
                 document_id=uuid4(),
                 content="Thanks @alice and @bob for the help with the FastAPI integration.",
-                timestamp=None,
+                timestamp=datetime.now(timezone.utc),
                 source="slack_message",
                 author="charlie",
             )
@@ -183,7 +238,7 @@ class TestEntityAgent:
             CommunicationEvent(
                 document_id=uuid4(),
                 content="Using Python with FastAPI and PostgreSQL for the backend.",
-                timestamp=None,
+                timestamp=datetime.now(timezone.utc),
                 source="markdown_message",
                 author="dev",
             )

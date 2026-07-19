@@ -33,8 +33,13 @@ class Settings(BaseSettings):
     # AI providers
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
-    model_provider: str = "anthropic"
+    gemini_api_key: str | None = None
+    model_provider: str = "gemini"
     embedding_provider: str = "openai"
+    
+    # Ollama settings
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2:latest"
 
     @property
     def cors_origin_list(self) -> list[str]:
