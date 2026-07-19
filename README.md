@@ -4,48 +4,77 @@ Multi-agent collaboration intelligence platform. Ingests exported team
 communication data (Slack/GitHub/Jira/etc.) and turns it into searchable
 knowledge and insights.
 
-## Status: v0.6 Complete — AI Reports & Export Center
+## Motivation
 
-**What's implemented:**
+Engineering teams generate vast amounts of communication data across platforms.
+NeuroNet AI extracts value from this data through AI agents that identify
+decisions, tasks, sentiment, and entities without manual effort.
 
-- ✅ v0.2 Import Engine: Markdown, TXT, GitHub Issues, GitHub PRs
-- ✅ v0.2 AI Intelligence Engine: Conversation, Task, Sentiment, Entity agents
-- ✅ v0.3 Workspace: Project AI analysis view with task board and sentiment
-- ✅ v0.4 Intelligence Dashboard: Cross-project analytics
-- ✅ v0.5 Knowledge Graph + AI Chat: Interactive graph and Q&A
-- ✅ v0.6 Reports & Export: Multi-format report generation
+## Features
+
+- ✅ **Import Engine**: Markdown, TXT, GitHub Issues, GitHub PRs
+- ✅ **AI Agents**: Conversation, Task, Sentiment, Entity analysis
+- ✅ **Workspace**: Project-centric AI analysis view
+- ✅ **Dashboard**: Cross-project analytics and insights
+- ✅ **AI Chat**: Natural language querying
+- ✅ **Knowledge Graph**: Interactive entity relationships
+- ✅ **Reports**: Multi-format export (PDF, Markdown, JSON)
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
+| AI | Custom rule-based agents (extensible to LangGraph) |
+| Frontend | Next.js 15, React, TypeScript, Tailwind CSS |
+| Auth | Supabase |
+| Deploy | Docker, uv package manager |
 
 ## Architecture
+
+```mermaid
+graph TD
+    A[Next.js Frontend] --> B[FastAPI Backend]
+    B --> C[AI Agents]
+    B --> D[PostgreSQL/Supabase]
+    C --> E[Conversation Agent]
+    C --> F[Task Agent]
+    C --> G[Sentiment Agent]
+    C --> H[Entity Agent]
+```
+
+## Folder Structure
 
 ```
 backend/
   app/
-    domain/          # entities + repository interfaces, zero framework deps
-    application/      # use cases, AI agents, analysis service
-    infrastructure/    # SQLAlchemy models, Postgres repository impl, parsers
-    api/              # FastAPI routes, request/response schemas, DI wiring
+    domain/          # Entities + Repository interfaces
+    application/      # Use cases + AI Agents
+    infrastructure/     # SQLAlchemy models, Repository impl
+    api/              # FastAPI routes + Schemas
+    shared/           # Config, logging, exceptions
   tests/
+
 frontend/
   src/
     app/             # Next.js App Router pages
-    components/       # Reusable UI components (16 total)
-    lib/api.ts        # typed fetch client for the backend
+    components/      # 16 reusable UI components
+    lib/api.ts       # Typed API client
+
+sample-data/         # Example import files
 ```
 
-Clean Architecture: `api` → `application` → `domain` ← `infrastructure`
+## Installation
 
-## Setup
+### 1. Database (Supabase)
 
-### 1. Supabase
-
-Create a project at supabase.com, then grab the Postgres connection string
-from **Project Settings → Database → Connection string (URI)**.
+Create a project at supabase.com and get your connection string.
 
 ### 2. Backend
 
 ```bash
 cd backend
-cp .env.example .env        # paste your DATABASE_URL
+cp .env.example .env        # Add DATABASE_URL
 uv venv
 source .venv/bin/activate
 uv sync --all-extras
@@ -65,30 +94,27 @@ npm run dev
 
 App: http://localhost:3000
 
-### 4. Docker
+## Environment Variables
 
-```bash
-docker compose up
+### Backend (.env)
+```
+DATABASE_URL=postgresql://...
 ```
 
-## Running tests
-
-```bash
-cd backend
-uv run pytest
+### Frontend (.env.local)
 ```
-
-**56 tests passing**
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
 ## API Endpoints
 
 ### Projects
 ```
-POST   /api/v1/projects     # Create project
-GET    /api/v1/projects     # List projects
-GET    /api/v1/projects/{id} # Get project
-PATCH  /api/v1/projects/{id} # Update project
-DELETE /api/v1/projects/{id} # Delete project
+POST   /api/v1/projects     Create project
+GET    /api/v1/projects     List projects
+GET    /api/v1/projects/{id} Get project
+PATCH  /api/v1/projects/{id} Update project
+DELETE /api/v1/projects/{id} Delete project
 ```
 
 ### Imports
@@ -103,26 +129,52 @@ GET    /api/v1/imports
 
 ### Analysis
 ```
-POST   /api/v1/analysis/{project_id}    # Run AI analysis
-GET    /api/v1/analysis/{project_id}    # Get analysis results
+POST   /api/v1/analysis/{project_id}
+GET    /api/v1/analysis/{project_id}
 GET    /api/v1/analysis/{project_id}/tasks
 GET    /api/v1/analysis/{project_id}/sentiment
 GET    /api/v1/analysis/{project_id}/entities
 ```
 
-## Frontend Routes
+### Health
+```
+GET    /api/v1/health
+```
 
-| Route | Page | Size |
-|-------|------|------|
-| /dashboard | Intelligence Dashboard | 2.6 kB |
-| /workspace/[projectId] | AI Workspace | 3.4 kB |
-| /chat | AI Chat | 1.9 kB |
-| /graph | Knowledge Graph | 1.6 kB |
-| /reports | Reports & Export | 2.5 kB |
-| /projects | Projects | 1.7 kB |
+## Running with Docker
 
-## Export Formats
+```bash
+docker compose up
+```
 
-- **PDF** - Text-based report
-- **Markdown** - `.md` with sections
-- **JSON** - Full analysis data
+## Testing
+
+```bash
+# Backend
+cd backend
+uv run pytest
+
+# Frontend
+cd frontend
+npm run lint
+npm run build
+```
+
+## Screenshots
+
+| Dashboard | Workspace | Chat |
+|-----------|-----------|------|
+| Analytics overview across projects | Task board with sentiment | AI-powered Q&A |
+
+## Future Roadmap
+
+- [ ] LangGraph integration for advanced workflows
+- [ ] Real-time streaming updates
+- [ ] Slack export support
+- [ ] Jira integration
+- [ ] Notion import
+- [ ] Vector embeddings for semantic search
+
+## License
+
+MIT License - see LICENSE file

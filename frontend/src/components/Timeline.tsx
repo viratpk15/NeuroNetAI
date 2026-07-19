@@ -14,8 +14,8 @@ export function Timeline({ analysis }: { analysis: Analysis }) {
     <div className="bg-surface rounded-lg p-6 border border-border">
       <h2 className="text-lg font-medium text-ink mb-4">Timeline</h2>
       <div className="space-y-3">
-        {events.map((event, i) => (
-          <div key={event.label} className="flex items-center gap-3">
+        {events.map((event, idx) => (
+          <div key={idx} className="flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full ${event.active ? "bg-signal" : "bg-border"}`} />
             <span className={`text-xs ${event.active ? "text-ink" : "text-inkMuted"}`}>
               {event.label}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, Analysis, Task, Entity } from "@/lib/api";
+import { useEffect, useState, useCallback } from "react";
+import { api, Analysis, Entity } from "@/lib/api";
 import { SummaryCard } from "@/components/SummaryCard";
 import { TaskBoard } from "@/components/TaskBoard";
 import { SentimentCard } from "@/components/SentimentCard";
@@ -22,13 +22,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     params.then(({ projectId: pid }) => setProjectId(pid));
   }, [params]);
 
-  useEffect(() => {
-    if (projectId) {
-      loadAnalysis();
-    }
-  }, [projectId]);
-
-  const loadAnalysis = async () => {
+  const loadAnalysis = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.getAnalysis(projectId);
@@ -38,9 +32,15 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
-  const runAnalysis = async () => {
+  useEffect(() => {
+    if (projectId) {
+      loadAnalysis();
+    }
+  }, [projectId, loadAnalysis]);
+
+  const runAnalysis = useCallback(async () => {
     setRunning(true);
     try {
       const data = await api.runAnalysis(projectId);
@@ -50,20 +50,23 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     } finally {
       setRunning(false);
     }
-  };
+  }, [projectId]);
 
   const tasksByStatus = {
-    todo: analysis?.tasks.filter(t => t.status === "open") || [],
-    in_progress: analysis?.tasks.filter(t => t.status === "in_progress") || [],
-    done: analysis?.tasks.filter(t => t.status === "done") || [],
+    todo: analysis?.tasks.filter((t) => t.status === "open") || [],
+    in_progress: analysis?.tasks.filter((t) => t.status === "in_progress") || [],
+    done: analysis?.tasks.filter((t) => t.status === "done") || [],
   };
 
-  const entitiesByType = analysis?.entities.reduce((acc, entity) => {
-    const key = entity.entity_type;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(entity);
-    return acc;
-  }, {} as Record<string, Entity[]>) || {};
+  const entitiesByType = analysis?.entities.reduce(
+    (acc, entity) => {
+      const key = entity.entity_type;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(entity);
+      return acc;
+    },
+    {} as Record<string, Entity[]>
+  ) || {};
 
   const entityTypeLabels = {
     person: "People",

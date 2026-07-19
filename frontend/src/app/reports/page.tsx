@@ -137,6 +137,7 @@ function TechnologyReport({ analysis }: { analysis: Analysis }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function TimelineReport({ analysis }: { analysis: Analysis }) {
   return (
     <div className="bg-surface rounded-lg p-6 border border-border">
@@ -150,6 +151,7 @@ function TimelineReport({ analysis }: { analysis: Analysis }) {
 }
 
 function RiskReport({ analysis }: { analysis: Analysis }) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const risks: string[] = [];
   if (analysis.sentiment?.overall_sentiment === "negative") risks.push("Negative sentiment detected");
   const highPriority = analysis.tasks.filter(t => t.priority === "high").length;

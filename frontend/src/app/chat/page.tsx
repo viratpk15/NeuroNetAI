@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { api, Analysis } from "@/lib/api";
 
 interface Message {
@@ -25,7 +25,7 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
     if (!input.trim()) return;
 
     const userMessage: Message = {
@@ -48,7 +48,7 @@ export default function ChatPage() {
     };
     setMessages(prev => [...prev, assistantMessage]);
     setLoading(false);
-  };
+  }, [input, analysis]);
 
   return (
     <div className="flex flex-col h-screen">
@@ -95,7 +95,7 @@ function EmptyState() {
   return (
     <div className="text-center py-12">
       <p className="text-inkMuted mb-2">No messages yet</p>
-      <p className="text-sm text-inkMuted/60">Try: "What decisions were made?" or "Who discussed authentication?"</p>
+      <p className="text-sm text-inkMuted/60">Try: &ldquo;What decisions were made?&rdquo; or &ldquo;Who discussed authentication?&rdquo;</p>
     </div>
   );
 }
