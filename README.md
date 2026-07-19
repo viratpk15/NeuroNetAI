@@ -4,32 +4,16 @@ Multi-agent collaboration intelligence platform. Ingests exported team
 communication data (Slack/GitHub/Jira/etc.) and turns it into searchable
 knowledge and insights.
 
-## Status: Phase 2 of 4 — data import (in progress)
+## Status: v0.6 Complete — AI Reports & Export Center
 
-This repo is being built in phases so every commit is real, runnable code
-with no placeholders or stubs pretending to be finished features. **What's
-here right now:**
+**What's implemented:**
 
-- FastAPI backend, clean-architecture layout (`domain` → `application` →
-  `infrastructure` → `api`), fully working **Projects** CRUD, async
-  SQLAlchemy against Supabase Postgres, unit tests for the service layer.
-- **Data Import (Phase 2)**: Parsers for Markdown, TXT, GitHub Issues, and
-  GitHub PRs with full `ImportJob` tracking, `Document` storage, and
-  `CommunicationEvent` extraction.
-- Next.js 15 + Tailwind frontend shell with a Dashboard and a Projects page
-  that are wired to the real API (create/list/archive/delete all work).
-- Docker Compose for local dev, `.env.example` files, no secrets committed.
-
-**In Progress:**
-
-- Data import endpoints (implemented), awaiting AI agent integration.
-
-**Not built yet:**
-
-- Phase 3: AI Chat (project-aware, using imported data + agent output) and
-  Dashboard metrics backed by real analysis instead of "phase 2" placeholders.
-- Phase 4: Knowledge graph, analytics, risk detection, reports, remaining
-  agents, docs generator.
+- ✅ v0.2 Import Engine: Markdown, TXT, GitHub Issues, GitHub PRs
+- ✅ v0.2 AI Intelligence Engine: Conversation, Task, Sentiment, Entity agents
+- ✅ v0.3 Workspace: Project AI analysis view with task board and sentiment
+- ✅ v0.4 Intelligence Dashboard: Cross-project analytics
+- ✅ v0.5 Knowledge Graph + AI Chat: Interactive graph and Q&A
+- ✅ v0.6 Reports & Export: Multi-format report generation
 
 ## Architecture
 
@@ -37,21 +21,18 @@ here right now:**
 backend/
   app/
     domain/          # entities + repository interfaces, zero framework deps
-    application/      # use cases (ProjectService), testable without a DB
-    infrastructure/    # SQLAlchemy models, Postgres repository impl
+    application/      # use cases, AI agents, analysis service
+    infrastructure/    # SQLAlchemy models, Postgres repository impl, parsers
     api/              # FastAPI routes, request/response schemas, DI wiring
   tests/
 frontend/
   src/
-    app/             # Next.js App Router pages (Dashboard, Projects)
-    components/       # Sidebar, shared UI
+    app/             # Next.js App Router pages
+    components/       # Reusable UI components (16 total)
     lib/api.ts        # typed fetch client for the backend
 ```
 
-The dependency direction is strict: `api` → `application` → `domain` ←
-`infrastructure`. Business logic (`ProjectService`) never imports FastAPI or
-SQLAlchemy, which is why `tests/test_project_service.py` can test it with an
-in-memory fake repository — no database needed to run the test suite.
+Clean Architecture: `api` → `application` → `domain` ← `infrastructure`
 
 ## Setup
 
@@ -64,16 +45,14 @@ from **Project Settings → Database → Connection string (URI)**.
 
 ```bash
 cd backend
-cp .env.example .env        # paste your Supabase DATABASE_URL in here
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+cp .env.example .env        # paste your DATABASE_URL
+uv venv
+source .venv/bin/activate
+uv sync --all-extras
+uv run uvicorn app.main:app --reload
 ```
 
 API docs: http://localhost:8000/docs
-Tables are auto-created on startup in development mode (via SQLAlchemy
-metadata). For production, switch to Alembic migrations before your first
-deploy — auto-create is a dev convenience, not a migration strategy.
 
 ### 3. Frontend
 
@@ -86,7 +65,7 @@ npm run dev
 
 App: http://localhost:3000
 
-### 4. Or, both at once with Docker
+### 4. Docker
 
 ```bash
 docker compose up
@@ -96,50 +75,54 @@ docker compose up
 
 ```bash
 cd backend
-pytest
+uv run pytest
 ```
 
-`test_project_service.py` exercises create/rename/archive/delete/validation
-against an in-memory repository — it's a real check of the business logic,
-not a smoke test.
+**56 tests passing**
 
-## Import API Endpoints
+## API Endpoints
 
+### Projects
 ```
-POST   /api/v1/imports/markdown      # Import markdown chat logs
-POST   /api/v1/imports/txt           # Import plain text chat logs
-POST   /api/v1/imports/github-issue  # Import GitHub issue JSON
-POST   /api/v1/imports/github-pr     # Import GitHub PR JSON
-GET    /api/v1/imports/{job_id}      # Get import job status
-GET    /api/v1/imports               # List import jobs (optional: ?project_id=UUID)
-GET    /api/v1/imports/documents/{document_id}/events  # Get events for a document
+POST   /api/v1/projects     # Create project
+GET    /api/v1/projects     # List projects
+GET    /api/v1/projects/{id} # Get project
+PATCH  /api/v1/projects/{id} # Update project
+DELETE /api/v1/projects/{id} # Delete project
 ```
 
-### Example: Import Markdown
-
-```bash
-curl -X POST http://localhost:8000/api/v1/imports/markdown \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "00000000-0000-0000-0000-000000000000",
-    "content": "## 2024-01-15 09:30 - @alice\n\nHello team!\n\n## 2024-01-15 09:35 - @bob\n\nWorking on the feature.",
-    "original_filename": "slack_export.md"
-  }'
+### Imports
+```
+POST   /api/v1/imports/markdown
+POST   /api/v1/imports/txt
+POST   /api/v1/imports/github-issue
+POST   /api/v1/imports/github-pr
+GET    /api/v1/imports/{job_id}
+GET    /api/v1/imports
 ```
 
-### Example: Import GitHub Issue
-
-```bash
-curl -X POST http://localhost:8000/api/v1/imports/github-issue \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "00000000-0000-0000-0000-000000000000",
-    "content": "{\"id\": 123, \"number\": 45, \"title\": \"Bug\", \"body\": \"Description\", \"user\": {\"login\": \"alice\"}, \"created_at\": \"2024-01-15T09:30:00Z\", \"comments\": []}"
-  }'
+### Analysis
+```
+POST   /api/v1/analysis/{project_id}    # Run AI analysis
+GET    /api/v1/analysis/{project_id}    # Get analysis results
+GET    /api/v1/analysis/{project_id}/tasks
+GET    /api/v1/analysis/{project_id}/sentiment
+GET    /api/v1/analysis/{project_id}/entities
 ```
 
-## Next step
+## Frontend Routes
 
-Say the word and I'll build phase 2: GitHub Issues/PR import + the first
-two LangGraph agents, writing real analysis results into the `documents`
-table this repo already has.
+| Route | Page | Size |
+|-------|------|------|
+| /dashboard | Intelligence Dashboard | 2.6 kB |
+| /workspace/[projectId] | AI Workspace | 3.4 kB |
+| /chat | AI Chat | 1.9 kB |
+| /graph | Knowledge Graph | 1.6 kB |
+| /reports | Reports & Export | 2.5 kB |
+| /projects | Projects | 1.7 kB |
+
+## Export Formats
+
+- **PDF** - Text-based report
+- **Markdown** - `.md` with sections
+- **JSON** - Full analysis data
