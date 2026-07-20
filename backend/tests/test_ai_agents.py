@@ -350,8 +350,13 @@ class TestEntityAgent:
         result = await agent.process(tech_events)
 
         entities = result["entities"]
-        tech_entities = [e for e in entities if e["entity_type"] == "technology"]
-        assert len(tech_entities) >= 1
+        # Entities can be framework, database, or programming_language type for these terms
+        # The content contains: Python (programming_language), FastAPI (framework), PostgreSQL (database)
+        entity_names = [e["name"].lower() for e in entities]
+        assert len(entities) >= 3  # Should extract Python, FastAPI, and PostgreSQL
+        assert any("python" in name for name in entity_names)
+        assert any("fastapi" in name for name in entity_names)
+        assert any("postgresql" in name for name in entity_names)
 
     async def test_handles_empty_events(self):
         agent = EntityAgent()
@@ -437,3 +442,184 @@ class TestEntityAgent:
         for entity in result["entities"]:
             assert "evidence" in entity
             assert isinstance(entity["evidence"], list)
+
+
+class TestProviderFactoryGemini:
+    """Integration tests for ProviderFactory returning GeminiProvider."""
+
+    def test_factory_returns_gemini_provider_when_configured(self, monkeypatch):
+        """Verify that ProviderFactory returns GeminiProvider when MODEL_PROVIDER=gemini."""
+        # Set required environment variables
+        monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+        monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
+        monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+        # Reset both the settings cache and factory to pick up new config
+        from app.infrastructure.ai_providers.factory import ProviderFactory
+        from app.shared.config import get_settings
+        get_settings.cache_clear()
+        ProviderFactory.reset()
+
+        provider = ProviderFactory.get_provider()
+
+        assert provider is not None
+        assert provider.__class__.__name__ == "GeminiProvider"
+        assert provider.model == "gemini-2.5-flash"
+
+    def test_factory_returns_ollama_provider_when_configured(self, monkeypatch):
+        """Verify that ProviderFactory returns OllamaProvider when MODEL_PROVIDER=ollama."""
+        monkeypatch.setenv("MODEL_PROVIDER", "ollama")
+        monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
+        monkeypatch.setenv("OLLAMA_MODEL", "llama3.2:latest")
+        monkeypatch.setenv("GEMINI_API_KEY", "")  # No Gemini key
+
+        from app.infrastructure.ai_providers.factory import ProviderFactory
+        from app.shared.config import get_settings
+        get_settings.cache_clear()
+        ProviderFactory.reset()
+
+        provider = ProviderFactory.get_provider()
+
+        assert provider is not None
+        assert provider.__class__.__name__ == "OllamaProvider"
+        assert provider.model == "llama3.2:latest"
+
+    def test_factory_returns_none_when_no_provider_configured(self, monkeypatch):
+        """Verify that ProviderFactory returns None when provider is not properly configured."""
+        monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+        monkeypatch.setenv("GEMINI_API_KEY", "")  # Empty API key
+
+        from app.infrastructure.ai_providers.factory import ProviderFactory
+        from app.shared.config import get_settings
+        get_settings.cache_clear()
+        ProviderFactory.reset()
+
+        provider = ProviderFactory.get_provider()
+
+        assert provider is None
+
+    def test_factory_returns_groq_provider_when_configured(self, monkeypatch):
+        """Verify that ProviderFactory returns GroqProvider when MODEL_PROVIDER=groq."""
+        monkeypatch.setenv("MODEL_PROVIDER", "groq")
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+        monkeypatch.setenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+        from app.infrastructure.ai_providers.factory import ProviderFactory
+        from app.shared.config import get_settings
+        get_settings.cache_clear()
+        ProviderFactory.reset()
+
+        provider = ProviderFactory.get_provider()
+
+        assert provider is not None
+        assert provider.__class__.__name__ == "GroqProvider"
+        assert provider.model == "llama-3.3-70b-versatile"
+
+
+class TestGroqProvider:
+    """Tests for GroqProvider initialization and JSON parsing."""
+
+    def test_groq_provider_initialization(self):
+        """Test GroqProvider can be initialized with required parameters."""
+        from app.infrastructure.ai_providers.groq_provider import GroqProvider
+
+        provider = GroqProvider(
+            api_key="test-api-key",
+            model="llama-3.3-70b-versatile",
+        )
+
+        assert provider.api_key == "test-api-key"
+        assert provider.model == "llama-3.3-70b-versatile"
+        assert provider.timeout == 120.0
+        assert provider.temperature == 0.2
+
+    def test_groq_provider_default_values(self):
+        """Test GroqProvider uses default values when parameters not provided."""
+        from app.infrastructure.ai_providers.groq_provider import GroqProvider
+
+        provider = GroqProvider(api_key="test-api-key")
+
+        assert provider.model == "llama-3.3-70b-versatile"
+        assert provider.timeout == 120.0
+        assert provider.temperature == 0.2
+
+    def test_groq_parse_valid_json(self):
+        """Test _parse_json_response handles valid JSON."""
+        from app.infrastructure.ai_providers.groq_provider import GroqProvider
+
+        provider = GroqProvider(api_key="test-api-key")
+
+        valid_json = '{"summary": "Test summary", "topics": ["topic1"], "decisions": []}'
+        result = provider._parse_json_response(valid_json)
+
+        assert result == {"summary": "Test summary", "topics": ["topic1"], "decisions": []}
+
+    def test_groq_parse_json_in_markdown(self):
+        """Test _parse_json_response extracts JSON from markdown code blocks."""
+        from app.infrastructure.ai_providers.groq_provider import GroqProvider
+
+        provider = GroqProvider(api_key="test-api-key")
+
+        markdown_json = '```json\n{"summary": "Test summary", "topics": ["topic1"]}\n```'
+        result = provider._parse_json_response(markdown_json)
+
+        assert result == {"summary": "Test summary", "topics": ["topic1"]}
+
+    def test_groq_parse_invalid_json(self):
+        """Test _parse_json_response returns empty dict for invalid JSON."""
+        from app.infrastructure.ai_providers.groq_provider import GroqProvider
+
+        provider = GroqProvider(api_key="test-api-key")
+
+        invalid_json = "This is not JSON at all"
+        result = provider._parse_json_response(invalid_json)
+
+        assert result == {}
+
+    def test_groq_parse_empty_response(self):
+        """Test _parse_json_response returns empty dict for empty response."""
+        from app.infrastructure.ai_providers.groq_provider import GroqProvider
+
+        provider = GroqProvider(api_key="test-api-key")
+
+        result = provider._parse_json_response("")
+
+        assert result == {}
+        result = provider._parse_json_response("   ")
+        assert result == {}
+
+    def test_groq_parse_json_with_text_before_code_block(self):
+        """Test _parse_json_response extracts JSON from text before markdown code block."""
+        from app.infrastructure.ai_providers.groq_provider import GroqProvider
+
+        provider = GroqProvider(api_key="test-api-key")
+
+        # This is the exact format Groq returns: text before the code block
+        response_with_text = '''Here's the analysis of the communication events in the requested format:
+
+```json
+{
+  "summary": "Test summary",
+  "topics": ["topic1", "topic2"],
+  "decisions": ["decision1"]
+}
+```'''
+        result = provider._parse_json_response(response_with_text)
+
+        assert result == {"summary": "Test summary", "topics": ["topic1", "topic2"], "decisions": ["decision1"]}
+
+    def test_groq_provider_returns_none_on_invalid_api_key(self, monkeypatch):
+        """Test that GroqProvider is not created when API key is empty."""
+        monkeypatch.setenv("MODEL_PROVIDER", "groq")
+        monkeypatch.setenv("GROQ_API_KEY", "")
+        monkeypatch.setenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+        from app.infrastructure.ai_providers.factory import ProviderFactory
+        from app.shared.config import get_settings
+        get_settings.cache_clear()
+        ProviderFactory.reset()
+
+        provider = ProviderFactory.get_provider()
+
+        # Should return None when API key is empty
+        assert provider is None

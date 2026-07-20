@@ -17,6 +17,12 @@ def _to_entity(row: SentimentResultModel) -> SentimentResult:
         positivity_score=row.positivity_score,
         stress_score=row.stress_score,
         confidence_score=row.confidence_score,
+        delivery_risk=row.delivery_risk,
+        team_morale=row.team_morale,
+        burnout_probability=row.burnout_probability,
+        timeline_signals=row.timeline_signals or [],
+        blockers=row.blockers or [],
+        conflicts=row.conflicts or [],
         created_at=row.created_at,
     )
 
@@ -30,6 +36,12 @@ def _to_model(entity: SentimentResult) -> SentimentResultModel:
         positivity_score=entity.positivity_score,
         stress_score=entity.stress_score,
         confidence_score=entity.confidence_score,
+        delivery_risk=entity.delivery_risk,
+        team_morale=entity.team_morale,
+        burnout_probability=entity.burnout_probability,
+        timeline_signals=entity.timeline_signals or [],
+        blockers=entity.blockers or [],
+        conflicts=entity.conflicts or [],
         created_at=entity.created_at,
     )
 

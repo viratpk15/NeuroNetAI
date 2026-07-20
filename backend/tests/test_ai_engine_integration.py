@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from app.infrastructure.ai_providers.ollama_provider import OllamaProvider
 from app.infrastructure.ai_providers.factory import ProviderFactory
-from app.domain.entities import CommunicationEvent
+from app.domain.entities import CommunicationEvent, AgentRun
 from uuid import uuid4
 
 
@@ -90,3 +90,16 @@ class TestAIEngineIntegration:
         provider = ProviderFactory.get_provider("unknown_provider")
         
         assert provider is None
+
+    async def test_agent_run_datetime_is_naive(self):
+        """Verify AgentRun datetime fields are naive (no tzinfo) for DB compatibility."""
+        agent_run = AgentRun(project_id=uuid4())
+        
+        # created_at should be naive
+        assert agent_run.created_at.tzinfo is None
+        
+        agent_run.mark_completed()
+        
+        # completed_at should be naive after completion
+        assert agent_run.completed_at is not None
+        assert agent_run.completed_at.tzinfo is None

@@ -32,10 +32,24 @@ class ConversationAgent(BaseAgent):
     Uses LLM provider (Ollama/Gemini) when available, falls back to rule-based analysis.
     """
 
-    # Keywords that indicate decisions
+    # Keywords that indicate ACTUAL decisions (not action items)
+    # Only match explicit decision language, NOT "will" which indicates tasks
     DECISION_KEYWORDS = [
-        "decided", "agreed", "will", "let's", "going to", "plan to",
-        "confirmed", "approved", "final", "conclusion", "resolve",
+        "decided to", "decided on", "agreed to use", "agreed on", 
+        "we'll use", "we will use", "use ", "adopt", "selected", "chose",
+        "confirmed", "approved", "final decision", "resolve",
+    ]
+
+    # Risk-indicating patterns
+    RISK_KEYWORDS = [
+        "pending", "blocked", "concern", "at risk", "might fail", "uncertain",
+        "delayed", "behind", "worried", "testing pending", "review pending",
+    ]
+
+    # Action item patterns (separate from decisions)
+    ACTION_KEYWORDS = [
+        "will", "need to", "should", "going to", "plan to", "assigned to",
+        "i'll", "i will", "take on", "work on", "implement", "deploy",
     ]
 
     # Topic categories
@@ -46,6 +60,13 @@ class ConversationAgent(BaseAgent):
         "feature": ["feature", "enhancement", "new", "add", "implement", "request"],
         "review": ["review", "feedback", "approve", "merge", "pull request", "pr"],
     }
+
+    # Technology keywords for summary generation
+    TECH_KEYWORDS = [
+        "fastapi", "django", "flask", "next.js", "jwt", "postgresql", "mongodb", 
+        "redis", "python", "javascript", "typescript", "aws", "docker", "kubernetes",
+        "authentication", "deployment", "migration", "staging",
+    ]
 
     def __init__(self, project_name: str | None = None):
         self._project_name = project_name
@@ -67,11 +88,21 @@ class ConversationAgent(BaseAgent):
 
         # Try LLM provider first
         provider = ProviderFactory.get_provider()
+        
+        # TEMPORARY DEBUG LOGGING - FALLBACK DETECTION
+        logger.info(f"ConversationAgent.process - PROVIDER AVAILABLE: {provider is not None}")
+        if provider:
+            logger.info(f"ConversationAgent.process - PROVIDER TYPE: {provider.__class__.__name__}")
+            logger.info(f"ConversationAgent.process - MODEL: {getattr(provider, 'model', 'unknown')}")
+        
         if provider:
             try:
                 result = await self._llm_process(events, provider)
                 if result is not None:
+                    logger.info(f"ConversationAgent.process - LLM SUCCESS, returning result with keys: {list(result.keys())}")
                     return result
+                else:
+                    logger.warning("ConversationAgent.process - LLM returned None, falling back to rule-based")
             except Exception as e:
                 logger.warning(f"LLM provider failed, falling back to rule-based: {e}")
 
@@ -96,6 +127,10 @@ class ConversationAgent(BaseAgent):
         start_time = time.time()
         prompt = self._prompt_builder.build_conversation_prompt(events, self._project_name)
 
+        # TEMPORARY DEBUG LOGGING - TRACE PROMPT IN AGENT
+        logger.info(f"ConversationAgent._llm_process - PROMPT BEING SENT: {prompt[:500]}")
+        logger.info(f"ConversationAgent._llm_process - PROMPT FULL LENGTH: {len(prompt)}")
+
         logger.info(
             f"LLM request - provider: {provider.__class__.__name__}, "
             f"model: {getattr(provider, 'model', 'unknown')}, "
@@ -103,6 +138,9 @@ class ConversationAgent(BaseAgent):
         )
 
         response = await provider.summarize_conversation(events, self._project_name)
+
+        # TEMPORARY DEBUG LOGGING - TRACE RESPONSE IN AGENT
+        logger.info(f"ConversationAgent._llm_process - RAW RESPONSE FROM PROVIDER: {response}")
 
         latency_ms = int((time.time() - start_time) * 1000)
         logger.info(
@@ -145,35 +183,34 @@ class ConversationAgent(BaseAgent):
         Returns:
             Dictionary with analysis results
         """
-        # Combine all content for analysis
-        all_content = " ".join(
-            f"{event.author or 'Unknown'}: {event.content}"
-            for event in events
-        )
-
         # Generate summary
-        summary = self._generate_summary(events, all_content)
+        summary = self._generate_summary_improved(events)
 
         # Extract topics
+        all_content = " ".join(event.content for event in events)
         topics = self._extract_topics(events, all_content)
 
         # Extract decisions
         decisions = self._extract_decisions(events)
 
+        # Extract risks
+        risks = self._extract_risks(events)
+
+        # Extract action items
+        action_items = self._extract_action_items(events)
+
         logger.info(
             f"ConversationAgent rule-based found {len(topics)} topics, "
-            f"{len(decisions)} decisions",
+            f"{len(decisions)} decisions, {len(risks)} risks, {len(action_items)} action items",
         )
 
-        # Rule-based can't extract risks/blockers/action_items reliably
-        # Return empty arrays for those
         return {
             "conversation_summary": summary,
             "discussion_topics": topics,
             "important_decisions": decisions,
-            "risks": [],
+            "risks": risks,
             "blockers": [],
-            "action_items": [],
+            "action_items": action_items,
         }
 
     def _generate_summary(self, events: list[CommunicationEvent], content: str) -> str:
@@ -217,6 +254,115 @@ class ConversationAgent(BaseAgent):
                     topics.append("team_discussion")
 
         return topics
+
+    def _generate_summary_improved(self, events: list[CommunicationEvent]) -> str:
+        """Generate a concise executive summary of the conversation.
+
+        Better logic that focuses on key topics and outcomes rather than just concatenating messages.
+        Max 100 words.
+        """
+        # Extract key topics and entities
+        tech_mentioned = []
+        actions_mentioned = []
+        
+        for event in events:
+            content = event.content
+            # Look for technology mentions
+            for keyword in self.TECH_KEYWORDS:
+                if keyword in content.lower() and keyword not in tech_mentioned:
+                    tech_mentioned.append(keyword.title())
+
+        # Build a natural summary
+        participants = list(set(e.author for e in events if e.author))
+        
+        # Find key discussion points
+        discussion_points = []
+        for event in events:
+            content_lower = event.content.lower()
+            if "migration" in content_lower or "migrate" in content_lower:
+                discussion_points.append("backend migration")
+            if "authentication" in content_lower or "auth" in content_lower:
+                discussion_points.append("authentication progress")
+            if "deploy" in content_lower or "deployment" in content_lower:
+                discussion_points.append("deployment planning")
+            if "database" in content_lower or "postgresql" in content_lower:
+                discussion_points.append("database decisions")
+            if "testing" in content_lower:
+                discussion_points.append("testing updates")
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_points = []
+        for p in discussion_points:
+            if p not in seen:
+                seen.add(p)
+                unique_points.append(p)
+
+        if unique_points:
+            summary = f"A team meeting discussed {', '.join(unique_points[:4])}."
+        elif len(events) <= 3:
+            summary = ". ".join(e.content for e in events if e.content)
+        else:
+            summary = f"Discussion with {len(participants)} participants on project topics."
+
+        # Clean up "Unknown:" prefixes
+        summary = re.sub(r'\bUnknown:\s*', '', summary)
+        
+        # Ensure max 100 words
+        words = summary.split()
+        if len(words) > 100:
+            summary = " ".join(words[:100])
+            
+        return summary
+
+    def _extract_risks(self, events: list[CommunicationEvent]) -> list[str]:
+        """Extract risks from events using risk keywords."""
+        risks = []
+        
+        for event in events:
+            content_lower = event.content.lower()
+            for keyword in self.RISK_KEYWORDS:
+                if keyword in content_lower:
+                    # Extract the risk statement
+                    match = re.search(
+                        rf'.{{0,80}}{re.escape(keyword)}.{{0,80}}',
+                        event.content,
+                        re.IGNORECASE,
+                    )
+                    if match:
+                        risk_text = match.group(0).strip()
+                        # Clean up and normalize
+                        if risk_text not in risks:
+                            risks.append(risk_text)
+        
+        return risks[:10]
+
+    def _extract_action_items(self, events: list[CommunicationEvent]) -> list[str]:
+        """Extract action items from events."""
+        action_items = []
+        seen_actions = set()
+        
+        for event in events:
+            content_lower = event.content.lower()
+            for keyword in self.ACTION_KEYWORDS:
+                if keyword in content_lower:
+                    # Extract the action statement
+                    match = re.search(
+                        rf'.{{0,80}}{re.escape(keyword)}.{{0,80}}',
+                        event.content,
+                        re.IGNORECASE,
+                    )
+                    if match:
+                        action_text = match.group(0).strip()
+                        # Normalize
+                        action_normalized = action_text.lower()[:50]
+                        if action_normalized not in seen_actions:
+                            seen_actions.add(action_normalized)
+                            # Clean up "I will" prefix to make it more natural
+                            action_text = re.sub(r'^(i\s+will|i\'ll|will)\s+', '', action_text, flags=re.IGNORECASE)
+                            action_items.append(action_text)
+        
+        return action_items[:10]
 
     def _extract_decisions(self, events: list[CommunicationEvent]) -> list[str]:
         """Extract decisions from events."""

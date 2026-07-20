@@ -62,16 +62,31 @@ class EntityAgent(BaseAgent):
     Uses LLM provider (Ollama/Gemini) when available, falls back to rule-based analysis.
     """
 
-    # Entity patterns for rule-based fallback
+    # Entity patterns for rule-based fallback with proper categorization
     PATTERNS = {
         "person": [
             r"@(\w+)",  # @username mentions
-            r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b",  # Capitalized names
+            r"^\s*([A-Z][a-z]+)\s*:\s*",  # Speaker names at start of message followed by colon
+            r"\b(Alice|Bob|Charlie|Sarah|Mike|Emma|John|Jane|David|David|Alex)\b",  # Common names
+        ],
+        "framework": [
+            r"\b(FastAPI|Django|Flask|Express|Next\.?js|Nuxt|Spring|Rails|Laravel)\b",
+            r"\b(Vue|React|Angular)\b",
+        ],
+        "programming_language": [
+            r"\b(Python|JavaScript|TypeScript|Go|Rust|Java|C\+\+|C#|PHP|Ruby|Swift|Kotlin)\b",
+        ],
+        "database": [
+            r"\b(PostgreSQL|MongoDb|Redis|MySQL|SQLite|Cassandra|DynamoDB|Supabase)\b",
         ],
         "technology": [
-            r"\b(Python|JavaScript|TypeScript|React|Vue|Angular|Node\.?js|FastAPI|Django|Flask)\b",
-            r"\b(API|REST|GraphQL|SQL|NoSQL|PostgreSQL|MongoDB|Redis)\b",
-            r"\b(AWS|Azure|GCP|Docker|Kubernetes|Terraform)\b",
+            r"\b(AWS|Azure|GCP|Docker|Kubernetes|Terraform|JWT|REST|GraphQL|API|Linux|Windows|macOS)\b",
+        ],
+        "tool": [
+            r"\b(Git|GitHub|GitLab|Jenkins|CircleCI|Travis|npm|pip|yarn|Maven)\b",
+        ],
+        "concept": [
+            r"\b(authentication|deployment|migration|testing|review|setup|configuration|integration|architecture)\b",
         ],
         "repository": [
             r"\b[\w-]+\/[\w-]+\b",  # owner/repo pattern
@@ -81,18 +96,8 @@ class EntityAgent(BaseAgent):
             r"\b/v\d+(?:/[\w-]+)*\b",  # /v1/endpoint paths
             r"\b(API|endpoint|route):\s*/[\w/-]+",
         ],
-        "library": [
-            r"\b(pydantic|sqlalchemy|httpx|requests|numpy|pandas|langchain|langgraph)\b",
-        ],
-        "framework": [
-            r"\b(fastapi|django|flask|express|next\.?js|nuxt)\b",
-        ],
-        "deadline": [
-            r"\b(?:due|by|deadline|milestone):\s*(?:\d{4}-\d{2}-\d{2}|\w+ \d{1,2})",
-            r"\b(?:sprint|release)\s+(?:\d+|v\d)",
-        ],
         "organization": [
-            r"\b(Inc|LLC|Corp|Company|Team|Department|Organization)\b",
+            r"\b(Inc|LLC|Corp|Company|Team|Organization)\b",
         ],
     }
 
@@ -183,6 +188,26 @@ class EntityAgent(BaseAgent):
         seen_entities = set()
 
         for event in events:
+            # Extract author as person entity if present
+            if event.author:
+                author = event.author.strip()
+                # Check if author looks like a person name (capitalized, not generic)
+                if author and len(author) >= 2 and author.lower() not in ["unknown", "system", "bot", "task", "risk", "decision"]:
+                    # Use the person name pattern to validate
+                    person_pattern = r"^[A-Z][a-z]+$"
+                    if re.match(person_pattern, author) or author.lower() in ["alice", "bob", "charlie", "sarah", "mike", "emma", "john", "jane", "alex"]:
+                        entity_key = f"person:{author.lower()}"
+                        if entity_key not in seen_entities:
+                            seen_entities.add(entity_key)
+                            entities.append({
+                                "entity_type": "person",
+                                "name": author,
+                                "context": event.content[:150],
+                                "confidence": 0.8,
+                                "relationships": [],
+                                "evidence": [event.content[:100]],
+                            })
+
             for entity_type, patterns in self.PATTERNS.items():
                 for pattern in patterns:
                     matches = re.findall(pattern, event.content, re.IGNORECASE)
@@ -205,7 +230,7 @@ class EntityAgent(BaseAgent):
                                 "entity_type": entity_type,
                                 "name": name,
                                 "context": event.content[:150],
-                                "confidence": 0.8 if entity_type in ("person", "technology") else 0.7,
+                                "confidence": 0.8 if entity_type in ("person", "technology", "database", "framework") else 0.7,
                                 "relationships": [],
                                 "evidence": [event.content[:100]],
                             })

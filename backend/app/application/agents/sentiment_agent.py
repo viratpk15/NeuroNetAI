@@ -125,7 +125,8 @@ class SentimentAgent(BaseAgent):
             )
 
             result = validated.model_dump()
-            # Maintain backward compatibility
+            # Maintain backward compatibility - map confidence to confidence_score
+            result["confidence_score"] = result.pop("confidence", 0.5)
             result["positivity_score"] = 0.5
             result["stress_score"] = 0.5
             return result
@@ -220,16 +221,34 @@ class SentimentAgent(BaseAgent):
             f"risk: {delivery_risk}",
         )
 
+        # Calculate numerical scores
+        total_events = max(len(events), 1)
+        max_signals = max(max(positive_count, negative_count), 1)
+        
+        positivity_score = min(positive_count / max_signals, 1.0) if positive_count > 0 else 0.3
+        stress_score = min(stress_count / total_events, 1.0)
+        confidence_score = 0.5 + (positive_count + negative_count) / (total_events * 2)
+        
+        logger.info(
+            f"SentimentAgent rule-based found sentiment: {overall_sentiment}, "
+            f"morale: {team_morale}, "
+            f"risk: {delivery_risk}, "
+            f"positivity: {positivity_score:.2f}, "
+            f"stress: {stress_score:.2f}",
+        )
+
         return {
             "overall_sentiment": overall_sentiment,
             "team_morale": team_morale,
             "delivery_risk": delivery_risk,
             "burnout_probability": burnout_probability,
-            "frustration_topics": negative_signals[:5],
+            "frustration_topics": list(set(negative_signals))[:5],
             "blockers": [],
             "conflicts": [],
             "positive_signals": list(set(positive_signals))[:5],
             "negative_signals": list(set(negative_signals))[:5],
-            "confidence_score": 0.6,
+            "confidence_score": round(confidence_score, 2),
+            "positivity_score": round(positivity_score, 2),
+            "stress_score": round(stress_score, 2),
             "evidence": [e.content[:100] for e in events[:3]],
         }

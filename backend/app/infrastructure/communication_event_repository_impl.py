@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from uuid import UUID
 
@@ -6,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities import CommunicationEvent
 from app.domain.repositories import CommunicationEventRepository
-from app.infrastructure.models import CommunicationEventModel
+from app.infrastructure.models import CommunicationEventModel, DocumentModel
 
 
 def _to_entity(row: CommunicationEventModel) -> CommunicationEvent:
@@ -71,3 +73,22 @@ class SqlAlchemyCommunicationEventRepository(CommunicationEventRepository):
             .where(CommunicationEventModel.document_id == document_id)
         )
         return result.scalar_one()
+
+    async def list_for_project(
+        self, project_id: UUID, limit: int = 500, offset: int = 0
+    ) -> list[tuple[CommunicationEvent, dict]]:
+        """List communication events for a project with document metadata."""
+        result = await self._session.execute(
+            select(CommunicationEventModel, DocumentModel.source_type)
+            .join(DocumentModel, CommunicationEventModel.document_id == DocumentModel.id)
+            .where(DocumentModel.project_id == project_id)
+            .order_by(CommunicationEventModel.timestamp.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        events_with_metadata = []
+        for event_row, source_type in result.all():
+            event = _to_entity(event_row)
+            metadata = {"source_type": source_type}
+            events_with_metadata.append((event, metadata))
+        return events_with_metadata

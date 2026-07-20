@@ -1,4 +1,3 @@
-import json
 from uuid import UUID
 
 from sqlalchemy import select
@@ -10,18 +9,8 @@ from app.infrastructure.models import ConversationSummaryModel
 
 
 def _to_entity(row: ConversationSummaryModel) -> ConversationSummary:
-    topics = []
-    if row.topics:
-        try:
-            topics = json.loads(row.topics) if isinstance(row.topics, str) else row.topics
-        except (json.JSONDecodeError, TypeError):
-            topics = []
-    decisions = []
-    if row.decisions:
-        try:
-            decisions = json.loads(row.decisions) if isinstance(row.decisions, str) else row.decisions
-        except (json.JSONDecodeError, TypeError):
-            decisions = []
+    topics = row.topics if row.topics else []
+    decisions = row.decisions if row.decisions else []
     return ConversationSummary(
         id=row.id,
         project_id=row.project_id,

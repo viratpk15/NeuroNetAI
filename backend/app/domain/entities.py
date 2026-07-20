@@ -14,7 +14,7 @@ class ProjectStatus(str, Enum):
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @dataclass
@@ -171,6 +171,12 @@ class SentimentResult:
     positivity_score: float = 0.0  # 0.0 - 1.0
     stress_score: float = 0.0  # 0.0 - 1.0
     confidence_score: float = 0.0  # 0.0 - 1.0
+    delivery_risk: str = "unknown"  # low, medium, high, critical
+    team_morale: str = "unknown"  # low, medium, high
+    burnout_probability: float = 0.0
+    timeline_signals: list[str] = field(default_factory=list)
+    blockers: list[str] = field(default_factory=list)
+    conflicts: list[str] = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=_utc_now)
 

@@ -218,10 +218,10 @@ class PromptBuilder:
 
     def _get_default_template(self, template_name: str) -> str:
         """Get default template for a given type.
-        
+
         Args:
             template_name: Name of the template
-            
+
         Returns:
             Default template string
         """

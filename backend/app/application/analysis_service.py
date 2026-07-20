@@ -1,10 +1,12 @@
 """Analysis Service for orchestrating AI Intelligence Engine."""
 import logging
+import time
 from uuid import UUID
 
 from app.domain.entities import AgentRun, CommunicationEvent
 from app.domain.repositories import (
     AgentRunRepository,
+    CommunicationEventRepository,
     ConversationSummaryRepository,
     EntityRepository,
     SentimentResultRepository,
@@ -22,12 +24,16 @@ class AnalysisResult:
         self,
         agent_run: AgentRun,
         summary: str,
+        topics: list[str],
+        decisions: list[str],
         tasks: list[dict],
         sentiment: dict,
         entities: list[dict],
     ):
         self.agent_run = agent_run
         self.summary = summary
+        self.topics = topics
+        self.decisions = decisions
         self.tasks = tasks
         self.sentiment = sentiment
         self.entities = entities
@@ -35,7 +41,7 @@ class AnalysisResult:
 
 class AnalysisService:
     """Service for running AI analysis on imported communication events.
-    
+
     Workflow:
     Communication Events → Conversation Agent → Task Agent → Sentiment Agent → Entity Agent
     """
@@ -43,12 +49,14 @@ class AnalysisService:
     def __init__(
         self,
         agent_run_repository: AgentRunRepository,
+        communication_event_repository: CommunicationEventRepository,
         conversation_summary_repository: ConversationSummaryRepository,
         task_repository: TaskRepository,
         sentiment_result_repository: SentimentResultRepository,
         entity_repository: EntityRepository,
     ):
         self._agent_run_repository = agent_run_repository
+        self._communication_event_repository = communication_event_repository
         self._conversation_summary_repository = conversation_summary_repository
         self._task_repository = task_repository
         self._sentiment_result_repository = sentiment_result_repository
@@ -56,26 +64,60 @@ class AnalysisService:
 
         self._agent_service = AgentService()
 
+    def _str_to_uuid(self, id_str: str) -> UUID:
+        """Convert string to UUID, creating one from the string if needed."""
+        try:
+            return UUID(id_str)
+        except ValueError:
+            return UUID(id_str.replace("-", "")[:32].ljust(32, "0"))
+
+    async def analyze_project_str(
+        self,
+        project_id: str,
+        communication_events: list[CommunicationEvent] | None = None,
+    ) -> AnalysisResult:
+        """Run complete AI analysis on a project's communication events.
+
+        Args:
+            project_id: The project ID as string
+            communication_events: Optional events to analyze. If not provided, loads from DB.
+
+        Returns:
+            AnalysisResult with all extracted insights
+        """
+        project_uuid = self._str_to_uuid(project_id)
+        if communication_events is None:
+            events_with_metadata = await self._communication_event_repository.list_for_project(
+                project_uuid
+            )
+            communication_events = [e for e, _ in events_with_metadata]
+            logger.info(
+                f"Loaded {len(communication_events)} events from project {project_id}"
+            )
+        return await self.analyze_project(project_uuid, communication_events)
+
     async def analyze_project(
         self,
         project_id: UUID,
         communication_events: list[CommunicationEvent],
     ) -> AnalysisResult:
         """Run complete AI analysis on a project's communication events.
-        
+
         Args:
             project_id: The project to analyze
             communication_events: Events to analyze
-            
+
         Returns:
             AnalysisResult with all extracted insights
         """
+        start_time = time.time()
+
         # Create agent run record
         agent_run = AgentRun(project_id=project_id)
         agent_run = await self._agent_run_repository.create(agent_run)
 
         try:
-            agent_run.mark_processing()
+            agent_run.mark_running()
             agent_run = await self._agent_run_repository.update(agent_run)
 
             # Run all agents
@@ -121,6 +163,12 @@ class AnalysisService:
                 positivity_score=results.get("positivity_score", 0.0),
                 stress_score=results.get("stress_score", 0.0),
                 confidence_score=results.get("confidence_score", 0.0),
+                delivery_risk=results.get("delivery_risk", "unknown"),
+                team_morale=results.get("team_morale", "unknown"),
+                burnout_probability=results.get("burnout_probability", 0.0),
+                timeline_signals=results.get("timeline_signals", []),
+                blockers=results.get("blockers", []),
+                conflicts=results.get("conflicts", []),
             )
             await self._sentiment_result_repository.create(sentiment_result)
 
@@ -142,17 +190,28 @@ class AnalysisService:
             agent_run.mark_completed(metadata={"event_count": len(communication_events)})
             agent_run = await self._agent_run_repository.update(agent_run)
 
-            logger.info(f"Analysis completed for project {project_id}: {len(tasks)} tasks, {len(entities)} entities")
+            duration_ms = int((time.time() - start_time) * 1000)
+            logger.info(
+                f"Analysis completed - project_id: {project_id}, "
+                f"duration: {duration_ms}ms, events: {len(communication_events)}"
+            )
 
             return AnalysisResult(
                 agent_run=agent_run,
                 summary=summary,
+                topics=topics,
+                decisions=decisions,
                 tasks=tasks,
                 sentiment={
                     "overall_sentiment": results.get("overall_sentiment", "neutral"),
                     "positivity_score": results.get("positivity_score", 0.0),
                     "stress_score": results.get("stress_score", 0.0),
                     "confidence_score": results.get("confidence_score", 0.0),
+                    "delivery_risk": results.get("delivery_risk", "unknown"),
+                    "team_morale": results.get("team_morale", "unknown"),
+                    "burnout_probability": results.get("burnout_probability", 0.0),
+                    "timeline_signals": results.get("timeline_signals", []),
+                    "blockers": results.get("blockers", []),
                 },
                 entities=entities,
             )
@@ -163,14 +222,19 @@ class AnalysisService:
             logger.error(f"Analysis failed for project {project_id}: {e}")
             raise
 
+    async def get_analysis_str(self, project_id: str) -> dict | None:
+        """Get the latest analysis results for a project by string ID."""
+        project_uuid = self._str_to_uuid(project_id)
+        return await self.get_analysis(project_uuid)
+
     async def get_analysis(self, project_id: UUID) -> dict | None:
         """Get the latest analysis results for a project."""
         agent_run = await self._agent_run_repository.get_latest_for_project(project_id)
         if not agent_run:
+            logger.info("AnalysisService.get_analysis - No agent_run found for project")
             return None
 
         # Get summary
-        from app.domain.entities import ConversationSummary
         summaries = await self._conversation_summary_repository.get_for_project(project_id, agent_run.id)
 
         # Get tasks
@@ -183,35 +247,46 @@ class AnalysisService:
         entities = await self._entity_repository.list(project_id, agent_run.id)
 
         return {
-            "agent_run_id": agent_run.id,
+            "agent_run_id": str(agent_run.id),
             "status": agent_run.status,
             "summary": summaries.summary if summaries else "",
             "topics": summaries.topics if summaries else [],
             "decisions": summaries.decisions if summaries else [],
             "tasks": [
                 {
-                    "id": t.id,
+                    "id": str(t.id),
+                    "project_id": str(project_id),
+                    "agent_run_id": str(agent_run.id),
                     "title": t.title,
                     "description": t.description,
                     "assignee": t.assignee,
                     "priority": t.priority,
                     "status": t.status,
+                    "due_date": t.due_date,
+                    "created_at": t.created_at,
                 }
                 for t in tasks
             ],
             "sentiment": {
+                "id": str(sentiment_row.id) if sentiment_row else "00000000-0000-0000-0000-000000000000",
+                "project_id": str(project_id),
+                "agent_run_id": str(agent_run.id),
                 "overall_sentiment": sentiment_row.overall_sentiment if sentiment_row else "neutral",
                 "positivity_score": sentiment_row.positivity_score if sentiment_row else 0.0,
                 "stress_score": sentiment_row.stress_score if sentiment_row else 0.0,
                 "confidence_score": sentiment_row.confidence_score if sentiment_row else 0.0,
+                "created_at": sentiment_row.created_at if sentiment_row else None,
             },
             "entities": [
                 {
-                    "id": e.id,
+                    "id": str(e.id),
+                    "project_id": str(project_id),
+                    "agent_run_id": str(agent_run.id),
                     "entity_type": e.entity_type,
                     "name": e.name,
                     "context": e.context,
                     "confidence": e.confidence,
+                    "created_at": e.created_at,
                 }
                 for e in entities
             ],
