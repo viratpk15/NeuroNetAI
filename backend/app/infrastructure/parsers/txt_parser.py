@@ -1,6 +1,6 @@
 """TXT parser for extracting communication events from plain text chat logs."""
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from app.domain.entities import CommunicationEvent
@@ -27,6 +27,12 @@ class TXTParser:
     ```
     2024-01-15 09:30 alice:
     Hello team
+    ```
+
+    Or plain text (any non-empty content):
+    ```
+    Hello world
+    ```
     """
 
     # Pattern for timestamp and author in brackets: [YYYY-MM-DD HH:MM:SS] <@author>
@@ -36,11 +42,26 @@ class TXTParser:
     SIMPLE_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})[:\s]+([^:]+):\s*$")
 
     def validate(self, content: str) -> bool:
-        """Validate that content looks like a text chat log."""
-        if not content or not content.strip():
+        """Validate that content has meaningful text content.
+
+        Accepts:
+        - Slack-style formatted messages with timestamps and authors
+        - Simple formatted messages with timestamps and authors
+        - Plain text content (any non-empty, non-whitespace-only text)
+
+        Rejects:
+        - Empty strings
+        - Whitespace-only strings
+        """
+        stripped = content.strip() if content else ""
+        if not stripped:
             return False
-        lines = content.strip().split("\n")
-        return any(self.SLACK_PATTERN.match(line) or self.SIMPLE_PATTERN.match(line) for line in lines)
+
+        lines = stripped.split("\n")
+        # Check if any line matches structured format
+        has_structured = any(self.SLACK_PATTERN.match(line) or self.SIMPLE_PATTERN.match(line) for line in lines)
+        # Accept if we have structured format OR any content with actual text
+        return has_structured or bool(stripped)
 
     def parse(self, document_id: UUID, content: str) -> list[CommunicationEvent]:
         """Parse txt content and extract communication events."""
@@ -72,7 +93,7 @@ class TXTParser:
                     fmt = "%Y-%m-%d %H:%M:%S" if slack_match else "%Y-%m-%d %H:%M"
                     current_timestamp = datetime.strptime(timestamp_str, fmt)
                 except ValueError:
-                    current_timestamp = datetime.now(timezone.utc)
+                    current_timestamp = datetime.utcnow()
                 current_message_lines = []
             elif current_timestamp is not None:
                 if line.strip():
@@ -81,6 +102,11 @@ class TXTParser:
         # Save last message
         if current_timestamp and current_message_lines:
             event = self._create_event(document_id, current_timestamp, current_author, current_message_lines)
+            events.append(event)
+
+        # If no structured messages were found, treat entire content as one event
+        if not events and content.strip():
+            event = self._create_event(document_id, datetime.utcnow(), None, [content.strip()])
             events.append(event)
 
         return events

@@ -63,7 +63,7 @@ class MarkdownParser:
                 try:
                     current_timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M")
                 except ValueError:
-                    current_timestamp = datetime.now(timezone.utc)
+                    current_timestamp = datetime.utcnow()
                 current_message_lines = []
             elif current_timestamp is not None:
                 # Accumulate message content

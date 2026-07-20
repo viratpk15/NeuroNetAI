@@ -133,11 +133,13 @@ class GitHubPRParser:
                 ))
 
     def _parse_timestamp(self, ts: str) -> datetime:
-        """Parse ISO 8601 timestamp from GitHub API."""
+        """Parse ISO 8601 timestamp from GitHub API and return naive UTC datetime."""
         if not ts:
-            return datetime.now(timezone.utc)
+            return datetime.utcnow()
         try:
             ts = ts.replace("Z", "+00:00")
-            return datetime.fromisoformat(ts.replace("+00:00", ""))
+            parsed = datetime.fromisoformat(ts.replace("+00:00", ""))
+            # Return naive UTC datetime (remove tzinfo to match TIMESTAMP WITHOUT TIME ZONE)
+            return parsed.replace(tzinfo=None)
         except ValueError:
-            return datetime.now(timezone.utc)
+            return datetime.utcnow()

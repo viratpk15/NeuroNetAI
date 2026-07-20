@@ -50,6 +50,10 @@ class ImportJobRepository(ABC):
     @abstractmethod
     async def update(self, job: ImportJob) -> ImportJob: ...
 
+    async def rollback(self) -> None:
+        """Roll back the current session transaction. Used for error recovery."""
+        ...
+
 
 class DocumentRepository(ABC):
     @abstractmethod
@@ -71,6 +75,20 @@ class CommunicationEventRepository(ABC):
 
     @abstractmethod
     async def count(self, document_id: UUID) -> int: ...
+
+    @abstractmethod
+    async def list_for_project(self, project_id: UUID, limit: int = 500, offset: int = 0) -> list[tuple[CommunicationEvent, dict]]:
+        """List communication events for a project with document metadata.
+
+        Args:
+            project_id: The project to get events for
+            limit: Maximum number of events
+            offset: Pagination offset
+
+        Returns:
+            List of tuples containing (CommunicationEvent, document_metadata)
+        """
+        ...
 
 
 # AI Intelligence Engine Repositories

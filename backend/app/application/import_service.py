@@ -7,7 +7,6 @@ import logging
 from uuid import UUID
 
 from app.domain.entities import (
-    CommunicationEvent,
     Document,
     ImportJob,
     ImportJobStatus,
@@ -121,14 +120,19 @@ class ImportService:
             return ImportResult(job=job, event_count=len(events))
 
         except ValidationError:
+            logger.exception(f"ValidationError during {source_type} import")
+            # Rollback session before updating job to avoid PendingRollbackError
+            await self._import_job_repository.rollback()
             job.mark_failed(f"Validation error for {source_type} import")
             await self._import_job_repository.update(job)
             raise
         except Exception as e:
             error_msg = str(e) if str(e) else "Unknown error during import"
+            logger.exception(f"Unexpected error during {source_type} import: {error_msg}")
+            # Rollback session before updating job to avoid PendingRollbackError
+            await self._import_job_repository.rollback()
             job.mark_failed(error_msg)
             await self._import_job_repository.update(job)
-            logger.error(f"Import failed: job {job.id}, error: {error_msg}")
             raise
 
     async def get_job(self, job_id: UUID) -> ImportJob:

@@ -199,6 +199,9 @@ class FakeCommunicationEventRepository(CommunicationEventRepository):
     async def count(self, document_id):
         return len(self._events)
 
+    async def list_for_project(self, project_id, limit=500, offset=0):
+        return [(e, {}) for e in self._events[offset : offset + limit]]
+
 
 # Parser Tests
 class TestMarkdownParser:
@@ -246,9 +249,16 @@ class TestTXTParser:
         parser = TXTParser()
         assert parser.validate("") is False
 
-    def test_validate_no_headers(self):
+    def test_validate_plain_text_accepted(self):
         parser = TXTParser()
-        assert parser.validate("No headers here") is False
+        # Plain text without headers should be accepted
+        assert parser.validate("Hello world") is True
+        assert parser.validate("Alice: ... Bob: ...") is True
+
+    def test_validate_whitespace_only_rejected(self):
+        parser = TXTParser()
+        assert parser.validate("   ") is False
+        assert parser.validate("\n\n\n") is False
 
     def test_parse_slack_format(self):
         parser = TXTParser()
@@ -263,10 +273,31 @@ class TestTXTParser:
         assert len(events) == 2
         assert events[0].author == "alice"
 
-    def test_parse_raises_on_invalid(self):
+    def test_parse_plain_text(self):
+        parser = TXTParser()
+        # Plain text should be parsed as a single event
+        events = parser.parse(uuid4(), "Hello world")
+        assert len(events) == 1
+        assert events[0].content == "Hello world"
+        assert events[0].author is None
+        assert events[0].source == "txt_message"
+
+    def test_parse_multiline_plain_text(self):
+        parser = TXTParser()
+        # Multiline plain text should be parsed as a single event
+        events = parser.parse(uuid4(), "Alice: Let's meet\nBob: OK")
+        assert len(events) == 1
+        assert "Alice: Let's meet" in events[0].content
+
+    def test_parse_raises_on_empty(self):
         parser = TXTParser()
         with pytest.raises(TXTParseError):
-            parser.parse(uuid4(), "invalid content")
+            parser.parse(uuid4(), "")
+
+    def test_parse_raises_on_whitespace_only(self):
+        parser = TXTParser()
+        with pytest.raises(TXTParseError):
+            parser.parse(uuid4(), "   \n\n")
 
 
 class TestGitHubIssueParser:
@@ -407,6 +438,21 @@ class TestImportService:
         assert result.event_count == 3
         assert result.job.status == ImportJobStatus.COMPLETED
 
+    async def test_import_txt_plain_text(
+        self, service
+    ):
+        svc, project_repo, job_repo, doc_repo, event_repo = service
+        project = list(project_repo._store.values())[0]
+
+        result = await svc.import_data(
+            project_id=project.id,
+            source_type=SourceType.TXT,
+            content="Hello world",
+        )
+
+        assert result.event_count == 1
+        assert result.job.status == ImportJobStatus.COMPLETED
+
     async def test_import_github_issue_creates_job_and_events(
         self, service
     ):
@@ -485,3 +531,57 @@ class TestImportService:
 
         jobs = await svc.list_jobs(project_id=project.id)
         assert len(jobs) == 2
+
+
+# Regression Tests for Timezone-Aware Timestamp Bug
+class TestTimestampNaiveUTC:
+    """Regression tests ensuring CommunicationEvent.timestamp is naive UTC before persistence.
+
+    PostgreSQL TIMESTAMP WITHOUT TIME ZONE column cannot accept timezone-aware datetimes.
+    All parsers must return naive datetime objects (tzinfo=None).
+    """
+
+    def test_txt_parser_timestamp_is_naive(self):
+        parser = TXTParser()
+        events = parser.parse(uuid4(), TXT_SLACK_SAMPLE)
+        for event in events:
+            assert event.timestamp.tzinfo is None, \
+                f"TXT parser returned timezone-aware timestamp: {event.timestamp}"
+
+    def test_txt_parser_fallback_timestamp_is_naive(self):
+        parser = TXTParser()
+        # Invalid timestamp format should fallback to utcnow()
+        events = parser.parse(uuid4(), "Hello world")
+        assert len(events) == 1
+        assert events[0].timestamp.tzinfo is None, \
+            "TXT parser fallback timestamp should be naive UTC"
+
+    def test_markdown_parser_timestamp_is_naive(self):
+        parser = MarkdownParser()
+        events = parser.parse(uuid4(), MARKDOWN_SAMPLE)
+        for event in events:
+            assert event.timestamp.tzinfo is None, \
+                f"Markdown parser returned timezone-aware timestamp: {event.timestamp}"
+
+    def test_github_issue_parser_timestamp_is_naive(self):
+        parser = GitHubIssueParser()
+        events = parser.parse(uuid4(), GITHUB_ISSUE_SAMPLE.replace("\n", ""))
+        for event in events:
+            assert event.timestamp.tzinfo is None, \
+                f"GitHub Issue parser returned timezone-aware timestamp: {event.timestamp}"
+
+    def test_github_pr_parser_timestamp_is_naive(self):
+        parser = GitHubPRParser()
+        events = parser.parse(uuid4(), GITHUB_PR_SAMPLE.replace("\n", ""))
+        for event in events:
+            assert event.timestamp.tzinfo is None, \
+                f"GitHub PR parser returned timezone-aware timestamp: {event.timestamp}"
+
+    def test_txt_parser_parsed_timestamp_is_naive(self):
+        """Test that parsed timestamps from strptime are naive."""
+        parser = TXTParser()
+        # Valid timestamp parsing
+        events = parser.parse(uuid4(), "[2024-01-15 09:30:00] <@alice>\nHello")
+        assert len(events) == 1
+        assert events[0].timestamp.tzinfo is None, \
+            "TXT parser parsed timestamp should be naive"

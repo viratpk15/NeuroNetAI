@@ -15,7 +15,7 @@ from app.infrastructure.database import Base
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class ProjectModel(Base):
@@ -210,6 +210,12 @@ class SentimentResultModel(Base):
     positivity_score: Mapped[float] = mapped_column(default=0.0)
     stress_score: Mapped[float] = mapped_column(default=0.0)
     confidence_score: Mapped[float] = mapped_column(default=0.0)
+    delivery_risk: Mapped[str] = mapped_column(String(20), default="unknown")
+    team_morale: Mapped[str] = mapped_column(String(20), default="unknown")
+    burnout_probability: Mapped[float] = mapped_column(default=0.0)
+    timeline_signals: Mapped[list[str]] = mapped_column(JSON, nullable=True, default=lambda: [])
+    blockers: Mapped[list[str]] = mapped_column(JSON, nullable=True, default=lambda: [])
+    conflicts: Mapped[list[str]] = mapped_column(JSON, nullable=True, default=lambda: [])
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
 

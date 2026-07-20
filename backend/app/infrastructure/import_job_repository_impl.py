@@ -40,6 +40,10 @@ class SqlAlchemyImportJobRepository(ImportJobRepository):
     def __init__(self, session: AsyncSession):
         self._session = session
 
+    async def rollback(self) -> None:
+        """Roll back the current session transaction. Used for error recovery."""
+        await self._session.rollback()
+
     async def create(self, job: ImportJob) -> ImportJob:
         row = _to_model(job)
         self._session.add(row)
