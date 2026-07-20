@@ -14,9 +14,9 @@ export function ErrorState({
   retryLabel = "Retry",
 }: ErrorStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="bg-surface rounded-full p-6 mb-4">
-        <svg className="w-8 h-8 text-risk" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div className="flex flex-col items-center justify-center py-16 px-4" role="alert" aria-live="polite">
+      <div className="bg-surface rounded-full p-6 mb-4" aria-hidden="true">
+        <svg className="w-8 h-8 text-risk" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </div>
@@ -25,7 +25,8 @@ export function ErrorState({
       {onRetry && (
         <button
           onClick={onRetry}
-          className="bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition"
+          className="bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-signal"
+          aria-label={retryLabel}
         >
           {retryLabel}
         </button>

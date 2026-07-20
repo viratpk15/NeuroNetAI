@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { api, Analysis } from "@/lib/api";
 import { LoadingState } from "@/components/LoadingState";
+import { useProjectStore } from "@/lib/store";
 
 interface Message {
   id: string;
@@ -12,7 +13,19 @@ interface Message {
   timestamp: Date;
 }
 
+// ChatResponse interface for future backend API integration
+interface ChatResponse {
+  answer: string;
+  sources: Array<{ document_id: string; chunk_id: string; source: string }>;
+  confidence: number;
+  retrieved_chunks: number;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _ChatResponse = ChatResponse;
+
 export default function ChatPage() {
+  const { currentProject } = useProjectStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,19 +33,25 @@ export default function ChatPage() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const projectId = currentProject?.id;
+
   useEffect(() => {
+    if (!projectId) {
+      setInitLoading(false);
+      return;
+    }
     setInitLoading(true);
-    api.getAnalysis("demo-project")
+    api.getAnalysis(projectId)
       .then(setAnalysis)
       .catch(() => {})
       .finally(() => setInitLoading(false));
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = useCallback(async () => {
+    const sendMessage = useCallback(() => {
     if (!input.trim()) return;
 
     const userMessage: Message = {
@@ -45,6 +64,7 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
 
+    // Use mock responses from analysis data
     const response = generateAIResponse(input, analysis);
     
     const assistantMessage: Message = {
@@ -68,7 +88,7 @@ export default function ChatPage() {
   }
 
   // Show onboarding if no analyzed project exists
-  if (!analysis) {
+  if (!projectId || !analysis) {
     return (
       <div className="flex flex-col h-screen">
         <header className="border-b border-border p-4">
@@ -80,12 +100,14 @@ export default function ChatPage() {
             <svg className="w-16 h-16 mx-auto mb-4 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4-.84c-1.21.436-2.429.82-3.654.943A1 1 0 013 19V7a1 1 0 011.447-.892c.96.378 2.025.72 3.116.996C8.03 6.29 9.19 6 10.5 6h9c4.418 0 8 3.582 8 8z" />
             </svg>
-            <h3 className="text-lg font-medium text-ink mb-2">Import project data before chatting</h3>
+            <h3 className="text-lg font-medium text-ink mb-2">{!projectId ? "Select a project first" : "Import project data before chatting"}</h3>
             <p className="text-sm text-inkMuted mb-4">
-              Import your team communications in the workspace to enable AI-powered chat insights.
+              {!projectId 
+                ? "Choose a project to view its insights."
+                : "Import your team communications in the workspace to enable AI-powered chat insights."}
             </p>
-            <Link href="/workspace/demo-project" className="inline-block bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition">
-              Go to Workspace
+            <Link href={!projectId ? "/projects" : `/workspace/${projectId}`} className="inline-block bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition">
+              {!projectId ? "Go to Projects" : "Go to Workspace"}
             </Link>
           </div>
         </div>
@@ -186,7 +208,7 @@ function generateAIResponse(question: string, analysis: Analysis | null): string
   if (q.includes("task") || q.includes("todo")) {
     const openTasks = analysis.tasks.filter(t => t.status !== "done");
     return openTasks.length
-      ? `Open tasks: ${openTasks.map(t => t.title).join(", ")}`
+      ? openTasks.map(t => `${t.title}${t.assignee ? ` (assigned to @${t.assignee})` : ''}${t.due_date ? ` due ${t.due_date}` : ''}`).join("\n")
       : "No open tasks found.";
   }
 
@@ -198,15 +220,39 @@ function generateAIResponse(question: string, analysis: Analysis | null): string
   }
 
   if (q.includes("technolog") || q.includes("tech")) {
-    const tech = analysis.entities.filter(e => e.entity_type === "technology");
+    const tech = analysis.entities.filter(e => ["technology", "framework", "database", "tool", "programming_language"].includes(e.entity_type));
     return tech.length
       ? `Technologies used: ${tech.map(t => t.name).join(", ")}`
       : "No technologies found.";
+  }
+
+  if (q.includes("framework")) {
+    const frameworks = analysis.entities.filter(e => e.entity_type === "framework");
+    return frameworks.length
+      ? `Frameworks used: ${frameworks.map(t => t.name).join(", ")}`
+      : "No frameworks found.";
+  }
+
+  if (q.includes("database")) {
+    const dbs = analysis.entities.filter(e => e.entity_type === "database");
+    return dbs.length
+      ? `Databases mentioned: ${dbs.map(t => t.name).join(", ")}`
+      : "No databases found.";
   }
 
   if (q.includes("summar")) {
     return analysis.summary || "No summary available.";
   }
 
-  return "I can help you find decisions, tasks, people, technologies, and summaries. What would you like to know?";
+  if (q.includes("sentiment") || q.includes("stress") || q.includes("morale")) {
+    if (!analysis.sentiment) return "No sentiment analysis available.";
+    return `Sentiment: ${analysis.sentiment.overall_sentiment}, Positivity: ${Math.round(analysis.sentiment.positivity_score * 100)}%, Stress: ${Math.round(analysis.sentiment.stress_score * 100)}%`;
+  }
+
+  if (q.includes("risk")) {
+    if (!analysis.sentiment?.delivery_risk) return "No delivery risk assessment available.";
+    return `Delivery risk level: ${analysis.sentiment.delivery_risk}`;
+  }
+
+  return "I can help you find decisions, tasks, people, technologies, frameworks, databases, summaries, and sentiment. What would you like to know?";
 }

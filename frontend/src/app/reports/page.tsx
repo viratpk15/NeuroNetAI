@@ -4,14 +4,23 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, Analysis } from "@/lib/api";
 import { ErrorState } from "@/components/ErrorState";
+import { useProjectStore } from "@/lib/store";
 
 export default function ReportsPage() {
+  const { currentProject } = useProjectStore();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const projectId = currentProject?.id;
+
   useEffect(() => {
-    api.getAnalysis("demo-project")
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
+
+    api.getAnalysis(projectId)
       .then(setAnalysis)
       .catch(e => {
         const err = e as Error & { status?: number; isNetworkError?: boolean };
@@ -22,7 +31,7 @@ export default function ReportsPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [projectId]);
 
   if (loading) {
     return <ReportsSkeleton />;
@@ -45,7 +54,7 @@ export default function ReportsPage() {
       </div>
 
       {!analysis ? (
-        <ReportsEmptyState />
+        <ReportsEmptyState projectId={projectId} />
       ) : (
         <div className="space-y-6">
           <ExecutiveSummary analysis={analysis} />
@@ -61,7 +70,11 @@ export default function ReportsPage() {
   );
 }
 
-function ReportsEmptyState() {
+interface ReportsEmptyStateProps {
+  projectId?: string;
+}
+
+function ReportsEmptyState({ projectId }: ReportsEmptyStateProps) {
   return (
     <div className="bg-surface rounded-lg p-12 border border-border text-center">
       <svg className="w-16 h-16 mx-auto mb-4 text-signal" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -71,8 +84,8 @@ function ReportsEmptyState() {
       <p className="text-sm text-inkMuted mb-4">
         Run AI analysis to generate your first report with insights about decisions, tasks, and technologies.
       </p>
-      <Link href="/workspace/demo-project" className="inline-block bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition">
-        Generate Report
+      <Link href={projectId ? `/workspace/${projectId}` : "/projects"} className="inline-block bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition">
+        {projectId ? "Generate Report" : "Go to Projects"}
       </Link>
     </div>
   );
@@ -114,7 +127,7 @@ function ExecutiveSummary({ analysis }: { analysis: Analysis }) {
 
 function TaskReport({ analysis }: { analysis: Analysis }) {
   const completed = analysis.tasks.filter(t => t.status === "done").length;
-  const pending = analysis.tasks.filter(t => t.status === "open").length;
+  const pending = analysis.tasks.filter(t => t.status === "todo").length;
   const highPriority = analysis.tasks.filter(t => t.priority === "high").length;
 
   return (

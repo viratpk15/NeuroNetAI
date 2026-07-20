@@ -1,15 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api, Project } from "@/lib/api";
+import { useProjectStore } from "@/lib/store";
+import { useToast } from "@/components/ToastProvider";
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const router = useRouter();
+  const { projects, setProjects, setCurrentProject, addProject } = useProjectStore();
+  const { toast } = useToast();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    api.listProjects()
+      .then(({ items }) => setProjects(items))
+      .catch((err) => {
+        const e = err as Error & { status?: number; isNetworkError?: boolean };
+        setError(e.isNetworkError 
+          ? "Unable to connect to backend. Please ensure the backend is running."
+          : e.message || "Failed to load projects");
+      })
+      .finally(() => setLoading(false));
+  }, [setProjects]);
 
   async function refresh() {
     setLoading(true);
@@ -29,50 +48,90 @@ export default function ProjectsPage() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-  }, []);
-
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     setSubmitting(true);
     try {
-      await api.createProject(name, description);
+      const project = await api.createProject(name, description);
+      addProject(project);
       setName("");
       setDescription("");
-      await refresh();
+      toast({
+        title: "Project created",
+        description: `${project.name} has been created successfully.`,
+        variant: "success",
+      });
+      // Navigate to workspace after creating
+      handleSelectProject(project);
     } catch (err) {
       const e = err as Error & { status?: number; isNetworkError?: boolean };
-      setError(e.isNetworkError 
+      const msg = e.isNetworkError 
         ? "Unable to connect to backend. Please ensure the backend is running."
-        : e.message || "Failed to create project");
+        : e.message || "Failed to create project";
+      setError(msg);
+      toast({
+        title: "Failed to create project",
+        description: msg,
+        variant: "error",
+      });
     } finally {
       setSubmitting(false);
     }
   }
 
+  function handleSelectProject(project: Project) {
+    if (project.status === "archived") {
+      setError("Cannot open archived project. Please restore it first.");
+      return;
+    }
+    setCurrentProject(project);
+    router.push(`/workspace/${project.id}`);
+  }
+
   async function handleArchive(id: string) {
     try {
       await api.archiveProject(id);
+      toast({
+        title: "Project archived",
+        description: "The project has been archived successfully.",
+        variant: "success",
+      });
       await refresh();
     } catch (err) {
       const e = err as Error & { status?: number; isNetworkError?: boolean };
-      setError(e.isNetworkError 
+      const msg = e.isNetworkError 
         ? "Unable to connect to backend. Please ensure the backend is running."
-        : e.message || "Failed to archive project");
+        : e.message || "Failed to archive project";
+      setError(msg);
+      toast({
+        title: "Failed to archive project",
+        description: msg,
+        variant: "error",
+      });
     }
   }
 
   async function handleDelete(id: string) {
     try {
       await api.deleteProject(id);
+      toast({
+        title: "Project deleted",
+        description: "The project has been deleted successfully.",
+        variant: "success",
+      });
       await refresh();
     } catch (err) {
       const e = err as Error & { status?: number; isNetworkError?: boolean };
-      setError(e.isNetworkError 
+      const msg = e.isNetworkError 
         ? "Unable to connect to backend. Please ensure the backend is running."
-        : e.message || "Failed to delete project");
+        : e.message || "Failed to delete project";
+      setError(msg);
+      toast({
+        title: "Failed to delete project",
+        description: msg,
+        variant: "error",
+      });
     }
   }
 
@@ -131,14 +190,15 @@ export default function ProjectsPage() {
           {projects.map((p) => (
             <li
               key={p.id}
-              className="rounded border border-border bg-surface p-4 flex items-center justify-between"
+              className="rounded border border-border bg-surface p-4 flex items-center justify-between hover:border-signal transition cursor-pointer"
+              onClick={() => handleSelectProject(p)}
             >
               <div>
                 <div className="text-ink text-sm font-medium">{p.name}</div>
                 {p.description && <div className="text-inkMuted text-xs mt-0.5">{p.description}</div>}
                 <div className="text-inkMuted/60 text-[11px] mt-1 font-mono uppercase">{p.status}</div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                 {p.status === "active" && (
                   <button
                     onClick={() => handleArchive(p.id)}

@@ -60,26 +60,3 @@ export function AICard({ title, description, confidence, sources, className = ""
     </div>
   );
 }
-
-interface StatusBadgeProps {
-  status: "active" | "completed" | "at-risk" | "critical" | "low" | "medium" | "high";
-  className?: string;
-}
-
-export function StatusBadge({ status, className = "" }: StatusBadgeProps) {
-  const bgColors = {
-    active: "bg-signal/20 text-signal",
-    completed: "bg-green-900/30 text-green-300",
-    "at-risk": "bg-amber-900/30 text-amber-300",
-    critical: "bg-risk/20 text-risk",
-    low: "bg-green-900/30 text-green-300",
-    medium: "bg-amber-900/30 text-amber-300",
-    high: "bg-risk/20 text-risk",
-  };
-
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full ${bgColors[status]} ${className}`}>
-      {status.replace("-", " ")}
-    </span>
-  );
-}

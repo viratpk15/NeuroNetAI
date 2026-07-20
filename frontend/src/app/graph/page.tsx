@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, Analysis, Entity } from "@/lib/api";
 import { ErrorState } from "@/components/ErrorState";
+import { useProjectStore } from "@/lib/store";
 
 const NODE_TYPE_COLORS: Record<string, string> = {
   person: "#a855f7",
@@ -24,15 +25,23 @@ interface TaskItem {
 }
 
 export default function GraphPage() {
+  const { currentProject } = useProjectStore();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, boolean>>({});
 
+  const projectId = currentProject?.id;
+
   useEffect(() => {
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
+
     api
-      .getAnalysis("demo-project")
+      .getAnalysis(projectId)
       .then((a) => {
         setAnalysis(a);
         const types = [...new Set(a.entities.map((e) => e.entity_type))];
@@ -52,10 +61,24 @@ export default function GraphPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [projectId]);
 
   if (loading) {
     return <GraphSkeleton />;
+  }
+
+  if (!projectId) {
+    return (
+      <div className="p-6 lg:p-8 max-w-6xl">
+        <h1 className="text-2xl font-display font-semibold text-ink mb-4">Knowledge Graph</h1>
+        <div className="text-center py-16">
+          <p className="text-inkMuted mb-4">Select a project to view its knowledge graph.</p>
+          <Link href="/projects" className="text-signal hover:underline">
+            Go to Projects
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
@@ -71,7 +94,7 @@ export default function GraphPage() {
     return (
       <div className="p-6 lg:p-8 max-w-6xl">
         <h1 className="text-2xl font-display font-semibold text-ink mb-4">Knowledge Graph</h1>
-        <GraphEmptyState />
+        <GraphEmptyState projectId={projectId} />
       </div>
     );
   }
@@ -238,7 +261,11 @@ function GraphSkeleton() {
   );
 }
 
-function GraphEmptyState() {
+interface GraphEmptyStateProps {
+  projectId: string;
+}
+
+function GraphEmptyState({ projectId }: GraphEmptyStateProps) {
   return (
     <div className="bg-surface rounded-lg p-12 border border-border text-center">
       <svg
@@ -259,7 +286,7 @@ function GraphEmptyState() {
         Run AI analysis to extract entities and relationships from your project communications.
       </p>
       <Link
-        href="/workspace/demo-project"
+        href={`/workspace/${projectId}`}
         className="inline-block bg-signal text-canvas px-4 py-2 rounded font-medium text-sm hover:brightness-110 transition"
       >
         Run Analysis
