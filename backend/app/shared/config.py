@@ -37,9 +37,16 @@ class Settings(BaseSettings):
     model_provider: str = "gemini"
     embedding_provider: str = "openai"
     
+    # Gemini settings
+    gemini_model: str = "gemini-2.5-flash"
+    
     # Ollama settings
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:latest"
+    
+    # Groq settings
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
 
     # RAG settings
     chunk_size: int = 1000

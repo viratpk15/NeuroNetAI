@@ -5,6 +5,7 @@ import json
 import logging
 from typing import Any
 
+import httpx
 import ollama
 
 from app.domain.entities import CommunicationEvent
@@ -22,7 +23,7 @@ class OllamaProvider(AIProvider):
 
     DEFAULT_HOST = "http://localhost:11434"
     DEFAULT_MODEL = "llama3.2:latest"
-    DEFAULT_TIMEOUT = 60.0
+    DEFAULT_TIMEOUT = 120.0  # Increased for model cold-start
 
     def __init__(
         self,
@@ -51,19 +52,27 @@ class OllamaProvider(AIProvider):
             
         Returns:
             Dictionary with summary, topics, decisions
+            
+        Raises:
+            Exception: If LLM call fails or returns invalid response
         """
         prompt = self.prompt_builder.build_conversation_prompt(events, project_name)
         
-        try:
-            response = await self._generate(prompt)
-            return self._parse_json_response(response)
-        except Exception as e:
-            logger.error(f"Ollama conversation summary failed: {e}")
-            return {
-                "conversation_summary": "",
-                "discussion_topics": [],
-                "important_decisions": [],
-            }
+        # TEMPORARY DEBUG LOGGING - TRACE PROMPT
+        logger.info(f"OllamaProvider.summarize_conversation - PROMPT (first 500 chars): {prompt[:500]}")
+        
+        response = await self._generate(prompt)
+        
+        # TEMPORARY DEBUG LOGGING - TRACE RAW RESPONSE
+        logger.info(f"OllamaProvider.summarize_conversation - RAW RESPONSE: '{response}'")
+        logger.info(f"OllamaProvider.summarize_conversation - RAW RESPONSE LENGTH: {len(response)}")
+        
+        result = self._parse_json_response(response)
+        logger.info(f"OllamaProvider.summarize_conversation - PARSED RESULT: {result}")
+        
+        if result is None:
+            raise ValueError("LLM returned empty or invalid JSON response")
+        return result
 
     async def extract_tasks(
         self,
@@ -78,15 +87,27 @@ class OllamaProvider(AIProvider):
             
         Returns:
             Dictionary with tasks list
+            
+        Raises:
+            Exception: If LLM call fails or returns invalid response
         """
         prompt = self.prompt_builder.build_task_prompt(events, project_name)
         
-        try:
-            response = await self._generate(prompt)
-            return self._parse_json_response(response)
-        except Exception as e:
-            logger.error(f"Ollama task extraction failed: {e}")
-            return {"tasks": []}
+        # TEMPORARY DEBUG LOGGING
+        logger.info(f"OllamaProvider.extract_tasks - PROMPT (first 500 chars): {prompt[:500]}")
+        
+        response = await self._generate(prompt)
+        
+        # TEMPORARY DEBUG LOGGING
+        logger.info(f"OllamaProvider.extract_tasks - RAW RESPONSE: '{response[:200]}...'")
+        
+        result = self._parse_json_response(response)
+        
+        logger.info(f"OllamaProvider.extract_tasks - PARSED RESULT: {result}")
+        
+        if result is None:
+            raise ValueError("LLM returned empty or invalid JSON response")
+        return result
 
     async def extract_entities(
         self,
@@ -101,15 +122,27 @@ class OllamaProvider(AIProvider):
             
         Returns:
             Dictionary with entities list
+            
+        Raises:
+            Exception: If LLM call fails or returns invalid response
         """
         prompt = self.prompt_builder.build_entity_prompt(events, project_name)
         
-        try:
-            response = await self._generate(prompt)
-            return self._parse_json_response(response)
-        except Exception as e:
-            logger.error(f"Ollama entity extraction failed: {e}")
-            return {"entities": []}
+        # TEMPORARY DEBUG LOGGING
+        logger.info(f"OllamaProvider.extract_entities - PROMPT (first 500 chars): {prompt[:500]}")
+        
+        response = await self._generate(prompt)
+        
+        # TEMPORARY DEBUG LOGGING
+        logger.info(f"OllamaProvider.extract_entities - RAW RESPONSE: '{response[:200]}...'")
+        
+        result = self._parse_json_response(response)
+        
+        logger.info(f"OllamaProvider.extract_entities - PARSED RESULT: {result}")
+        
+        if result is None:
+            raise ValueError("LLM returned empty or invalid JSON response")
+        return result
 
     async def analyze_sentiment(
         self,
@@ -124,20 +157,27 @@ class OllamaProvider(AIProvider):
             
         Returns:
             Dictionary with sentiment analysis results
+            
+        Raises:
+            Exception: If LLM call fails or returns invalid response
         """
         prompt = self.prompt_builder.build_sentiment_prompt(events, project_name)
         
-        try:
-            response = await self._generate(prompt)
-            return self._parse_json_response(response)
-        except Exception as e:
-            logger.error(f"Ollama sentiment analysis failed: {e}")
-            return {
-                "overall_sentiment": "neutral",
-                "positivity_score": 0.0,
-                "stress_score": 0.0,
-                "confidence_score": 0.0,
-            }
+        # TEMPORARY DEBUG LOGGING
+        logger.info(f"OllamaProvider.analyze_sentiment - PROMPT (first 500 chars): {prompt[:500]}")
+        
+        response = await self._generate(prompt)
+        
+        # TEMPORARY DEBUG LOGGING
+        logger.info(f"OllamaProvider.analyze_sentiment - RAW RESPONSE: '{response[:200]}...'")
+        
+        result = self._parse_json_response(response)
+        
+        logger.info(f"OllamaProvider.analyze_sentiment - PARSED RESULT: {result}")
+        
+        if result is None:
+            raise ValueError("LLM returned empty or invalid JSON response")
+        return result
 
     async def chat(
         self,
@@ -191,25 +231,34 @@ class OllamaProvider(AIProvider):
                 model=self.model,
                 prompt=prompt,
             )
-            return response.get("response", "") or ""
+            raw_response = response.get("response", "") or ""
+            # TEMPORARY DEBUG LOGGING - TRACE FULL API RESPONSE
+            logger.info(f"OllamaProvider._generate - FULL API RESPONSE OBJECT: {response}")
+            return raw_response
         except ollama.ResponseError as e:
             logger.error(f"Ollama API response error: {e}")
             raise
+        except httpx.ReadTimeout as e:
+            logger.warning(f"Ollama request timed out: {e}")
+            raise TimeoutError(f"Ollama request timed out after {self.timeout}s") from e
+        except httpx.ConnectError as e:
+            logger.warning(f"Could not connect to Ollama at {self.host}: {e}")
+            raise ConnectionError(f"Could not connect to Ollama at {self.host}") from e
         except Exception as e:
             logger.error(f"Ollama API call failed: {e}")
             raise
 
-    def _parse_json_response(self, response: str) -> dict[str, Any]:
+    def _parse_json_response(self, response: str) -> dict[str, Any] | None:
         """Parse JSON response from Ollama.
-        
+
         Args:
             response: Text response from API
-            
+
         Returns:
-            Parsed JSON dictionary
+            Parsed JSON dictionary or None if invalid/empty
         """
         response = response.strip()
-        
+
         # Remove markdown code block wrappers if present
         if response.startswith("```json"):
             response = response[7:]
@@ -217,14 +266,18 @@ class OllamaProvider(AIProvider):
             response = response[3:]
         if response.endswith("```"):
             response = response[:-3]
-        
+
         response = response.strip()
-        
+
+        if not response:
+            logger.warning("Empty response from LLM")
+            return None
+
         try:
             return json.loads(response)
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse JSON response: {e}")
-            return {}
+            return None
 
     async def close(self) -> None:
         """Close the client connection."""

@@ -6,6 +6,7 @@ from typing import Any
 
 from app.infrastructure.ai_providers.base import AIProvider
 from app.infrastructure.ai_providers.gemini_provider import GeminiProvider
+from app.infrastructure.ai_providers.groq_provider import GroqProvider
 from app.infrastructure.ai_providers.ollama_provider import OllamaProvider
 from app.prompts.prompt_builder import PromptBuilder
 from app.shared.config import get_settings
@@ -36,8 +37,12 @@ class ProviderFactory:
         settings = get_settings()
         provider_type = provider_type or settings.model_provider
         
+        # TEMPORARY DEBUG LOGGING
+        logger.info(f"ProviderFactory.get_provider - REQUESTED: {provider_type}, MODEL_PROVIDER: {settings.model_provider}")
+        
         # Return cached instance if available
         if cls._instance is not None:
+            logger.info(f"ProviderFactory.get_provider - RETURNING CACHED INSTANCE: {cls._instance.__class__.__name__}")
             return cls._instance
         
         if provider_type == "gemini":
@@ -45,8 +50,11 @@ class ProviderFactory:
             if not api_key:
                 logger.warning("Gemini provider requested but GEMINI_API_KEY not configured")
                 return None
-            cls._instance = GeminiProvider(api_key=api_key)
-            logger.info("Created Gemini provider instance")
+            cls._instance = GeminiProvider(
+                api_key=api_key,
+                model=settings.gemini_model,
+            )
+            logger.info(f"Created Gemini provider instance (model: {settings.gemini_model})")
             return cls._instance
         
         elif provider_type == "ollama":
@@ -55,6 +63,18 @@ class ProviderFactory:
                 model=settings.ollama_model,
             )
             logger.info(f"Created Ollama provider instance (model: {settings.ollama_model})")
+            return cls._instance
+        
+        elif provider_type == "groq":
+            api_key = settings.groq_api_key
+            if not api_key:
+                logger.warning("Groq provider requested but GROQ_API_KEY not configured")
+                return None
+            cls._instance = GroqProvider(
+                api_key=api_key,
+                model=settings.groq_model,
+            )
+            logger.info(f"Created Groq provider instance (model: {settings.groq_model})")
             return cls._instance
         
         elif provider_type == "openai":
